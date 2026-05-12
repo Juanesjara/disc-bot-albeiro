@@ -1,0 +1,23 @@
+# Dependencias
+node_modules/
+
+# Build
+dist/
+
+# Entorno y secretos
+.env
+.env.*
+config.json
+
+# Autenticación YouTube
+cookies.txt
+
+# Claude Code local
+.claude/
+
+# Editores e IDEs
+.vercel
+.vscode/
+*.xlsx
+
+

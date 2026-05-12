@@ -4,7 +4,7 @@
   "description": "Bot de Discord con reproductor de música y quiz musical",
   "main": "dist/index.js",
   "engines": {
-    "node": ">=18.x"
+    "node": ">=22.x"
   },
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",

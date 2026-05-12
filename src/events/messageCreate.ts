@@ -2,6 +2,7 @@ import { Message } from 'discord.js';
 import { BotClient } from '../types';
 
 module.exports = (client: BotClient, message: Message) => {
+    console.log(`[MSG] ${message.author.tag}: ${message.content}`);
     if (message.author.bot || !message.guild) return;
     if (!message.content.startsWith(client.prefix)) return;
 

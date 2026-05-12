@@ -1,13 +1,18 @@
-FROM node:12.18.4-stretch
+FROM node:22-slim
 
 WORKDIR /app
 
 RUN apt-get update && \
-    apt install -y ffmpeg libav-tools opus-tools
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        python3 \
+        build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY ./ /app
+COPY package*.json ./
+RUN npm install
 
-RUN npm ci && \
-    npm run build
+COPY . .
+RUN npm run build
 
-ENTRYPOINT ["node", "dist/index.js"]
+CMD ["node", "dist/index.js"]

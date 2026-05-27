@@ -84,6 +84,7 @@ export class MusicQuiz {
 
         try {
             const result = await player.search(query);
+            
 
             if (!result.hasTracks()) {
                 return this.nextSong('No encontré esta canción en YouTube, pasando a la siguiente.');
@@ -98,7 +99,7 @@ export class MusicQuiz {
                 : pool[0];
 
             const existingQueue = useQueue(this.guildId);
-
+            console.log(best.title, best.url);
             if (existingQueue) {
                 existingQueue.tracks.clear();
                 existingQueue.addTrack(best);

@@ -52,8 +52,12 @@ export class MusicQuiz {
                 .sort(() => Math.random() - 0.5)
                 .slice(0, songCount);
         } catch (err: any) {
-            console.error('[Quiz] Error Spotify:', err?.message ?? err);
-            this.textChannel.send(':warning: No pude obtener la playlist de Spotify. Verifica que sea pública.');
+            const status = err?.statusCode ?? err?.status;
+            console.error('[Quiz] Error Spotify:', status, err?.message ?? err);
+            const msg = (status === 401 || status === 403)
+                ? ':warning: No tengo acceso a esa playlist. Los Blend y playlists privadas requieren autenticación de usuario y no son compatibles. Usa una playlist pública tuya o una chart como el Top 50.'
+                : ':warning: No pude obtener la playlist de Spotify. Verifica que sea pública y que la URL sea correcta.';
+            this.textChannel.send(msg);
             return;
         }
 

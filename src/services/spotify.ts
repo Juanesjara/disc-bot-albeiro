@@ -1,39 +1,32 @@
-import SpotifyApi from 'spotify-web-api-node';
-import { config } from '../config/config';
+import playdl, { SpotifyPlaylist } from 'play-dl';
 import { Song } from '../types';
 
 export class SpotifyService {
-    private client = new SpotifyApi({
-        clientId: config.spotify.clientId,
-        clientSecret: config.spotify.clientSecret,
-    });
+    // play-dl manages its own Spotify token internally — no credentials needed
+    async authorize(): Promise<void> {}
 
-    async authorize(): Promise<void> {
-        const response = await this.client.clientCredentialsGrant();
-        this.client.setAccessToken(response.body.access_token);
-    }
+    async getPlaylistSongs(playlistUrl: string): Promise<Song[]> {
+        const data = await playdl.spotify(playlistUrl);
 
-    async getPlaylistSongs(playlistId: string): Promise<Song[]> {
-        let id = playlistId;
-        const match = playlistId.match(/playlist\/([^?]+)/);
-        if (match) id = match[1];
+        if (data.type !== 'playlist') {
+            throw new Error('La URL no corresponde a una playlist de Spotify.');
+        }
 
-        const result = await this.client.getPlaylistTracks(id);
-        return result.body.items
-            .filter(item => item.track !== null)
-            .map(({ track }) => ({
-                title: this.stripSongName(track!.name),
-                artist: track!.artists[0]?.name || 'Desconocido',
-                spotifyUrl: `https://open.spotify.com/track/${track!.id}`,
-            }));
+        const tracks = await (data as SpotifyPlaylist).all_tracks();
+
+        return tracks.map(track => ({
+            title: this.stripSongName(track.name),
+            artist: track.artists[0]?.name || 'Desconocido',
+            spotifyUrl: track.url,
+        }));
     }
 
     private stripSongName(name: string): string {
         return name
-            .replace(/\s*\(.*?\)/g, '')    // Quita (feat. ...), (Remix), (Official...), etc.
-            .replace(/\s*\[.*?\]/g, '')    // Quita [feat. ...], [Official Video], etc.
-            .replace(/\s*-\s.*$/, '')      // Quita - Anything After Dash
-            .replace(/\s*feat\..*$/i, '')  // Quita feat. si quedó suelto
+            .replace(/\s*\(.*?\)/g, '')
+            .replace(/\s*\[.*?\]/g, '')
+            .replace(/\s*-\s.*$/, '')
+            .replace(/\s*feat\..*$/i, '')
             .trim();
     }
 }

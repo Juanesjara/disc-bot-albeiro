@@ -42,7 +42,6 @@ export class MusicQuiz {
     async start(playlistUrl: string, songCount: number): Promise<void> {
         const spotify = new SpotifyService();
         try {
-            await spotify.authorize();
             const allSongs = await spotify.getPlaylistSongs(playlistUrl);
             if (!allSongs.length) {
                 this.textChannel.send(':warning: Esta playlist no tiene canciones o no es pública.');
@@ -52,11 +51,10 @@ export class MusicQuiz {
                 .sort(() => Math.random() - 0.5)
                 .slice(0, songCount);
         } catch (err: any) {
-            const status = err?.statusCode ?? err?.status;
-            console.error('[Quiz] Error Spotify:', status, err?.message ?? err);
-            const msg = (status === 401 || status === 403)
-                ? ':warning: No tengo acceso a esa playlist. Los Blend y playlists privadas requieren autenticación de usuario y no son compatibles. Usa una playlist pública tuya o una chart como el Top 50.'
-                : ':warning: No pude obtener la playlist de Spotify. Verifica que sea pública y que la URL sea correcta.';
+            console.error('[Quiz] Error al obtener playlist:', err?.message ?? err);
+            const msg = (err?.statusCode ?? err?.status) === 404
+                ? ':warning: No pude acceder a esa playlist. Los Blend de Spotify son privados y no son compatibles. Usa una playlist pública.'
+                : ':warning: No pude obtener la playlist. Verifica que sea pública.';
             this.textChannel.send(msg);
             return;
         }

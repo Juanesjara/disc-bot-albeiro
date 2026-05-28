@@ -15,5 +15,8 @@ export const config = {
     spotify: {
         clientId: process.env.SPOTIFY_CLIENT_ID,
         clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+        // Optional: copy from browser to access Spotify editorial playlists (Top 50, etc.)
+        // DevTools → Application → Cookies → open.spotify.com → sp_dc
+        spDc: process.env.SPOTIFY_SP_DC || '',
     },
 };

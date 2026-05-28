@@ -23,7 +23,7 @@ const command: Command = {
 
         const [playlistUrl, songCountStr, modeArg] = args;
 
-        if (!playlistUrl || !playlistUrl.includes('spotify.com/playlist')) {
+        if (!playlistUrl || !/spotify\.com\/(playlist|blend)\//.test(playlistUrl)) {
             return message.channel.send(
                 `:warning: Debes proporcionar una URL de playlist de Spotify.\nUso: \`${client.prefix}quiz <url_playlist> <canciones> [artist|title|both]\``
             );

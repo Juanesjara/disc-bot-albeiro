@@ -28,7 +28,7 @@ export class SpotifyService {
             .filter(t => t.name)
             .map(t => ({
                 title: this.stripSongName(t.name as string),
-                artist: (t.artist as string) || 'Desconocido',
+                artist: (((t.artist as string) || '').split(',')[0].trim()) || 'Desconocido',
                 spotifyUrl: t.uri
                     ? `https://open.spotify.com/track/${(t.uri as string).split(':').pop()}`
                     : playlistUrl,

@@ -53,10 +53,10 @@ client.prefix = config.prefix;
                     noWarnings: true,
                     noPlaylist: true,
                     jsRuntime: 'node',
-                    // Solo el cliente tv: usa cookies, esquiva el 403 del CDN, y consultar
-                    // un único cliente recorta ~2-4s de latencia al iniciar cada canción
-                    // (yt-dlp consulta TODOS los clientes listados, no son fallback perezoso)
-                    extractorArgs: 'youtube:player_client=tv',
+                    // Combo probado en Railway: los tres usan cookies y se cubren entre sí
+                    // (tv solo falla a veces con "The page needs to be reloaded").
+                    // Costo: ~5s de arranque por consultar varios clientes; fiabilidad > velocidad.
+                    extractorArgs: 'youtube:player_client=tv,web_safari,mweb',
                     forceIpv4: true,
                 };
                 if (hasCookies) ytdlOptions.cookies = cookiesFile;

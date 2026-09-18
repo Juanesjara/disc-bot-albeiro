@@ -52,8 +52,10 @@ client.prefix = config_1.config.prefix;
                     noWarnings: true,
                     noPlaylist: true,
                     jsRuntime: 'node',
-                    // Solo clientes que usan cookies (android/ios las ignoran y piden login)
-                    extractorArgs: 'youtube:player_client=tv,web_safari,mweb',
+                    // Solo el cliente tv: usa cookies, esquiva el 403 del CDN, y consultar
+                    // un único cliente recorta ~2-4s de latencia al iniciar cada canción
+                    // (yt-dlp consulta TODOS los clientes listados, no son fallback perezoso)
+                    extractorArgs: 'youtube:player_client=tv',
                     forceIpv4: true,
                 };
                 if (hasCookies)

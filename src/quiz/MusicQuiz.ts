@@ -6,13 +6,17 @@ import {
     GuildMember,
     EmbedBuilder,
 } from 'discord.js';
-import { useMainPlayer, useQueue, GuildQueue, Track } from 'discord-player';
+import { useMainPlayer, useQueue, Track } from 'discord-player';
 import { SpotifyService } from '../services/spotify';
 import { Song } from '../types';
 import { config } from '../config/config';
+import { prefetchTrack, clearPrefetched } from '../streamer';
 
 const STOP_CMD = `${config.prefix}stop`;
 const SKIP_CMD = `${config.prefix}vskip`;
+// El quiz reproduce desde 1:30 (el coro): el stream se genera ya empezando ahí,
+// en vez de sonar desde 0:00 y saltar con seek (que re-creaba el stream = doble silencio)
+const QUIZ_SEEK_SECONDS = 90;
 
 // Exportado para que los eventos del player puedan saber si hay un quiz activo
 export const quizGuilds = new Set<string>();
@@ -86,22 +90,20 @@ export class MusicQuiz {
 
         try {
             const result = await player.search(query);
-            
+
 
             if (!result.hasTracks()) {
                 return this.nextSong('No encontré esta canción en YouTube, pasando a la siguiente.');
             }
 
-            // Filtrar remixes y elegir la mejor versión
-            const REMIX_WORDS = ['remix', 'slowed', 'reverb', 'cover', 'hardstyle', 'speed up', 'sped up', 'nightcore', 'lofi', 'karaoke'];
-            const originals = result.tracks.filter(t => !REMIX_WORDS.some(w => t.title.toLowerCase().includes(w)));
-            const pool = originals.length > 0 ? originals : result.tracks;
-            const best = pool.some(t => t.views > 0)
-                ? pool.sort((a, b) => (b.views || 0) - (a.views || 0))[0]
-                : pool[0];
+            const best = MusicQuiz.pickBest(result.tracks);
+            console.log(best.title, best.url);
+
+            // Asegurar que el stream exista YA empezando en 1:30 (si la precarga de la
+            // ronda anterior lo dejó listo, esto es un no-op y la transición es instantánea)
+            prefetchTrack(best.url, best.title, QUIZ_SEEK_SECONDS);
 
             const existingQueue = useQueue(this.guildId);
-            console.log(best.title, best.url);
             if (existingQueue) {
                 existingQueue.tracks.clear();
                 existingQueue.addTrack(best);
@@ -118,18 +120,8 @@ export class MusicQuiz {
                 });
             }
 
-            // Buscar al minuto 1:30 cuando la canción REALMENTE empiece
-            const seekOnStart = (queue: GuildQueue, _track: Track) => {
-                if (queue.guild.id !== this.guildId || this.stopped) return;
-                setTimeout(async () => {
-                    if (this.stopped) return;
-                    const q = useQueue(this.guildId);
-                    if (q?.isPlaying()) {
-                        try { await q.node.seek(90_000); } catch {}
-                    }
-                }, 500);
-            };
-            player.events.once('playerStart', seekOnStart);
+            // Mientras suena esta, dejar lista la siguiente (búsqueda + stream en 1:30)
+            this.prefetchNextSong(player);
 
         } catch (err: any) {
             console.error('[Quiz] Error reproduciendo canción:', err?.message ?? err);
@@ -142,6 +134,30 @@ export class MusicQuiz {
         this.songTimer = setTimeout(() => {
             this.nextSong(':alarm_clock: ¡Se acabó el tiempo! No adivinaron la canción.');
         }, 60_000);
+    }
+
+    // Filtrar remixes y elegir la versión más vista
+    private static pickBest(tracks: Track[]): Track {
+        const REMIX_WORDS = ['remix', 'slowed', 'reverb', 'cover', 'hardstyle', 'speed up', 'sped up', 'nightcore', 'lofi', 'karaoke'];
+        const originals = tracks.filter(t => !REMIX_WORDS.some(w => t.title.toLowerCase().includes(w)));
+        const pool = originals.length > 0 ? originals : tracks;
+        return pool.some(t => t.views > 0)
+            ? [...pool].sort((a, b) => (b.views || 0) - (a.views || 0))[0]
+            : pool[0];
+    }
+
+    // Precarga (búsqueda + stream desde 1:30) de la siguiente canción del quiz
+    // mientras suena la actual, para que la transición sea casi instantánea
+    private prefetchNextSong(player: ReturnType<typeof useMainPlayer>): void {
+        const next = this.songs[this.currentIndex + 1];
+        if (!next) return;
+        player.search(`${next.title} ${next.artist}`)
+            .then(res => {
+                if (this.stopped || !res.hasTracks()) return;
+                const best = MusicQuiz.pickBest(res.tracks);
+                prefetchTrack(best.url, best.title, QUIZ_SEEK_SECONDS);
+            })
+            .catch(() => {});
     }
 
     private handleMessage(message: Message): void {
@@ -270,6 +286,8 @@ export class MusicQuiz {
         if (this.songTimer) clearTimeout(this.songTimer);
         if (this.collector) this.collector.stop();
         quizGuilds.delete(this.guildId);
+        // Descartar precargas del quiz: llevan seek a 1:30 y contaminarían un =play normal
+        clearPrefetched();
         const queue = useQueue(this.guildId);
         queue?.delete();
     }

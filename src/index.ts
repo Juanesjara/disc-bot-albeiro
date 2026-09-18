@@ -2,8 +2,7 @@ import { Client, GatewayIntentBits, Collection } from 'discord.js';
 import { Player } from 'discord-player';
 import { SpotifyExtractor, AttachmentExtractor } from '@discord-player/extractor';
 import { YoutubeExtractor } from 'discord-player-youtubei';
-import youtubeDl from 'youtube-dl-exec';
-import { PassThrough } from 'stream';
+import { initStreamer, spawnStream, takePrefetched, prefetchTrack, clearPrefetched } from './streamer';
 import path from 'path';
 import fs from 'fs';
 import { config } from './config/config';
@@ -40,63 +39,15 @@ client.prefix = config.prefix;
         console.warn('[Player] ADVERTENCIA: No se encontró cookies.txt — YouTube puede bloquear streams');
     }
 
-    // YouTube: yt-dlp descarga y streamea el audio directamente (pipe de stdout).
-    // Dejar que yt-dlp baje el CDN con su propio contexto evita el 403 que daba el fetch manual.
+    // YouTube: yt-dlp descarga y streamea el audio directamente (ver src/streamer.ts).
+    // Si hay un stream precargado (siguiente de la cola / quiz), se usa al instante.
+    initStreamer(hasCookies ? cookiesFile : null);
     await player.extractors.register(YoutubeExtractor, {
         createStream: async (track: any) => {
-            try {
-                const ytdlOptions: any = {
-                    // Mejor audio disponible; fallback a formato 18 (mp4 no-DASH) si falla
-                    format: 'bestaudio[acodec=opus]/bestaudio/18',
-                    output: '-',        // volcar a stdout
-                    quiet: true,
-                    noWarnings: true,
-                    noPlaylist: true,
-                    jsRuntime: 'node',
-                    // Combo probado en Railway: los tres usan cookies y se cubren entre sí
-                    // (tv solo falla a veces con "The page needs to be reloaded").
-                    // Costo: ~5s de arranque por consultar varios clientes; fiabilidad > velocidad.
-                    extractorArgs: 'youtube:player_client=tv,web_safari,mweb',
-                    forceIpv4: true,
-                };
-                if (hasCookies) ytdlOptions.cookies = cookiesFile;
-
-                // .exec() devuelve el subproceso (no lo await-ea) para poder pipear su stdout
-                const subprocess = (youtubeDl as any).exec(track.url, ytdlOptions, {
-                    stdio: ['ignore', 'pipe', 'pipe'],
-                });
-
-                // Buffer intermedio para suavizar la lectura hacia discord-player/ffmpeg
-                const buffered = new PassThrough({ highWaterMark: 4 * 1024 * 1024 });
-
-                // Guardar la última línea de error de yt-dlp para diagnóstico
-                let lastErr = '';
-                subprocess.stderr?.on('data', (chunk: Buffer) => {
-                    const line = chunk.toString().trim();
-                    if (line) { lastErr = line.split('\n')[0]; console.error('[yt-dlp]', lastErr); }
-                });
-
-                // CRÍTICO: capturar el rechazo del subproceso para que un track fallido
-                // NO tumbe todo el proceso (unhandled rejection -> crash del bot).
-                if (typeof subprocess.catch === 'function') {
-                    subprocess.catch((err: any) => {
-                        const msg = lastErr || err?.shortMessage || err?.message || 'yt-dlp falló';
-                        console.error('[Stream] yt-dlp falló:', msg);
-                        buffered.destroy(new Error(msg));
-                    });
-                }
-                subprocess.on?.('error', (err: any) => buffered.destroy(err));
-
-                if (!subprocess.stdout) throw new Error('yt-dlp no expuso stdout');
-                console.log(`[Stream] Iniciando pipe de yt-dlp para: ${track.title ?? track.url}`);
-
-                subprocess.stdout.pipe(buffered);
-                subprocess.stdout.on('error', (err: any) => buffered.destroy(err));
-                return buffered;
-            } catch (err: any) {
-                console.error('[Stream] ERROR:', err?.message ?? err);
-                throw err;
-            }
+            const cached = takePrefetched(track.url);
+            if (cached) return cached;
+            console.log(`[Stream] Iniciando pipe de yt-dlp para: ${track.title ?? track.url}`);
+            return spawnStream(track.url, track.title);
         },
     });
     // Spotify con credenciales para que el quiz pueda resolver tracks por URL
@@ -140,6 +91,14 @@ client.prefix = config.prefix;
         const event = require(path.join(playerEventsPath, file));
         player.events.on(eventName as any, (...args: any[]) => event(...args));
     }
+
+    // Precargar la siguiente canción de la cola mientras suena la actual
+    // (las del quiz se precargan desde MusicQuiz con su propio seek)
+    player.events.on('playerStart', (queue: any) => {
+        const next = queue?.tracks?.at?.(0) ?? queue?.tracks?.data?.[0];
+        if (next?.url) prefetchTrack(next.url, next.title);
+    });
+    player.events.on('emptyQueue', () => clearPrefetched());
 
     client.login(config.token);
 })();

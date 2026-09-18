@@ -12,6 +12,9 @@ RUN apt-get update && \
 COPY package*.json ./
 RUN npm install
 
+# Actualizar yt-dlp a la última versión (YouTube rompe versiones viejas seguido)
+RUN ./node_modules/youtube-dl-exec/bin/yt-dlp -U || true
+
 COPY . .
 RUN npm run build
 

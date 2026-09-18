@@ -8,8 +8,6 @@ const discord_player_1 = require("discord-player");
 const extractor_1 = require("@discord-player/extractor");
 const discord_player_youtubei_1 = require("discord-player-youtubei");
 const youtube_dl_exec_1 = __importDefault(require("youtube-dl-exec"));
-const https_1 = __importDefault(require("https"));
-const http_1 = __importDefault(require("http"));
 const stream_1 = require("stream");
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
@@ -41,53 +39,43 @@ client.prefix = config_1.config.prefix;
     else {
         console.warn('[Player] ADVERTENCIA: No se encontró cookies.txt — YouTube puede bloquear streams');
     }
-    // YouTube: yt-dlp obtiene la URL CDN autenticada, https la streamea con headers correctos
+    // YouTube: yt-dlp descarga y streamea el audio directamente (pipe de stdout).
+    // Dejar que yt-dlp baje el CDN con su propio contexto evita el 403 que daba el fetch manual.
     await player.extractors.register(discord_player_youtubei_1.YoutubeExtractor, {
         createStream: async (track) => {
             try {
-                // Paso 1: yt-dlp resuelve la URL del CDN (no descarga, solo extrae la URL)
                 const ytdlOptions = {
                     // Mejor audio disponible; fallback a formato 18 (mp4 no-DASH) si falla
                     format: 'bestaudio[acodec=opus][abr>=100]/bestaudio[acodec=opus]/bestaudio/18',
-                    getUrl: true,
+                    output: '-', // volcar a stdout
+                    quiet: true,
                     noWarnings: true,
+                    noPlaylist: true,
                     jsRuntime: 'node',
                 };
                 if (hasCookies)
                     ytdlOptions.cookies = cookiesFile;
-                const output = await youtube_dl_exec_1.default(track.url, ytdlOptions);
-                const streamUrl = output.split('\n').map((l) => l.trim()).filter(Boolean)[0];
-                if (!streamUrl)
-                    throw new Error('yt-dlp no devolvió URL');
-                // Paso 2: streamear la URL del CDN con headers de navegador
-                return new Promise((resolve, reject) => {
-                    const protocol = streamUrl.startsWith('https') ? https_1.default : http_1.default;
-                    const req = protocol.get(streamUrl, {
-                        headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                            'Accept': '*/*',
-                            'Accept-Encoding': 'identity',
-                            'Connection': 'keep-alive',
-                            'Referer': 'https://www.youtube.com/',
-                        },
-                    }, (res) => {
-                        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                            const rp = res.headers.location.startsWith('https') ? https_1.default : http_1.default;
-                            rp.get(res.headers.location, { headers: { 'Accept-Encoding': 'identity' } }, (redirectRes) => {
-                                const buffered = new stream_1.PassThrough({ highWaterMark: 4 * 1024 * 1024 });
-                                redirectRes.pipe(buffered);
-                                resolve(buffered);
-                            }).on('error', reject);
-                        }
-                        else {
-                            console.log(`[Stream] CDN ${res.statusCode} — ${res.headers['content-type']} — ${res.headers['content-length']} bytes`);
-                            const buffered = new stream_1.PassThrough({ highWaterMark: 4 * 1024 * 1024 });
-                            res.pipe(buffered);
-                            resolve(buffered);
-                        }
-                    });
-                    req.on('error', reject);
+                // .exec() devuelve el subproceso (no lo await-ea) para poder pipear su stdout
+                const subprocess = youtube_dl_exec_1.default.exec(track.url, ytdlOptions, {
+                    stdio: ['ignore', 'pipe', 'pipe'],
                 });
+                // Log de diagnóstico: mostrar la primera línea de error de yt-dlp si algo falla
+                subprocess.stderr?.on('data', (chunk) => {
+                    const line = chunk.toString().trim();
+                    if (line)
+                        console.error('[yt-dlp]', line.split('\n')[0]);
+                });
+                subprocess.on('error', (err) => {
+                    console.error('[Stream] subproceso yt-dlp falló:', err?.message ?? err);
+                });
+                if (!subprocess.stdout)
+                    throw new Error('yt-dlp no expuso stdout');
+                console.log(`[Stream] Iniciando pipe de yt-dlp para: ${track.title ?? track.url}`);
+                // Buffer intermedio para suavizar la lectura hacia discord-player/ffmpeg
+                const buffered = new stream_1.PassThrough({ highWaterMark: 4 * 1024 * 1024 });
+                subprocess.stdout.pipe(buffered);
+                subprocess.stdout.on('error', (err) => buffered.destroy(err));
+                return buffered;
             }
             catch (err) {
                 console.error('[Stream] ERROR:', err?.message ?? err);

@@ -53,8 +53,8 @@ client.prefix = config.prefix;
                     noWarnings: true,
                     noPlaylist: true,
                     jsRuntime: 'node',
-                    // Forzar clientes de YouTube que suelen dar URLs no bloqueadas por IP
-                    extractorArgs: 'youtube:player_client=android,web_safari,tv',
+                    // Solo clientes que usan cookies (android/ios las ignoran y piden login)
+                    extractorArgs: 'youtube:player_client=tv,web_safari,mweb',
                     forceIpv4: true,
                 };
                 if (hasCookies) ytdlOptions.cookies = cookiesFile;

@@ -47,12 +47,15 @@ client.prefix = config.prefix;
             try {
                 const ytdlOptions: any = {
                     // Mejor audio disponible; fallback a formato 18 (mp4 no-DASH) si falla
-                    format: 'bestaudio[acodec=opus][abr>=100]/bestaudio[acodec=opus]/bestaudio/18',
+                    format: 'bestaudio[acodec=opus]/bestaudio/18',
                     output: '-',        // volcar a stdout
                     quiet: true,
                     noWarnings: true,
                     noPlaylist: true,
                     jsRuntime: 'node',
+                    // Forzar clientes de YouTube que suelen dar URLs no bloqueadas por IP
+                    extractorArgs: 'youtube:player_client=android,web_safari,tv',
+                    forceIpv4: true,
                 };
                 if (hasCookies) ytdlOptions.cookies = cookiesFile;
 
@@ -61,20 +64,30 @@ client.prefix = config.prefix;
                     stdio: ['ignore', 'pipe', 'pipe'],
                 });
 
-                // Log de diagnóstico: mostrar la primera línea de error de yt-dlp si algo falla
+                // Buffer intermedio para suavizar la lectura hacia discord-player/ffmpeg
+                const buffered = new PassThrough({ highWaterMark: 4 * 1024 * 1024 });
+
+                // Guardar la última línea de error de yt-dlp para diagnóstico
+                let lastErr = '';
                 subprocess.stderr?.on('data', (chunk: Buffer) => {
                     const line = chunk.toString().trim();
-                    if (line) console.error('[yt-dlp]', line.split('\n')[0]);
+                    if (line) { lastErr = line.split('\n')[0]; console.error('[yt-dlp]', lastErr); }
                 });
-                subprocess.on('error', (err: any) => {
-                    console.error('[Stream] subproceso yt-dlp falló:', err?.message ?? err);
-                });
+
+                // CRÍTICO: capturar el rechazo del subproceso para que un track fallido
+                // NO tumbe todo el proceso (unhandled rejection -> crash del bot).
+                if (typeof subprocess.catch === 'function') {
+                    subprocess.catch((err: any) => {
+                        const msg = lastErr || err?.shortMessage || err?.message || 'yt-dlp falló';
+                        console.error('[Stream] yt-dlp falló:', msg);
+                        buffered.destroy(new Error(msg));
+                    });
+                }
+                subprocess.on?.('error', (err: any) => buffered.destroy(err));
 
                 if (!subprocess.stdout) throw new Error('yt-dlp no expuso stdout');
                 console.log(`[Stream] Iniciando pipe de yt-dlp para: ${track.title ?? track.url}`);
 
-                // Buffer intermedio para suavizar la lectura hacia discord-player/ffmpeg
-                const buffered = new PassThrough({ highWaterMark: 4 * 1024 * 1024 });
                 subprocess.stdout.pipe(buffered);
                 subprocess.stdout.on('error', (err: any) => buffered.destroy(err));
                 return buffered;

@@ -190,7 +190,7 @@ export class MusicQuiz {
         const normalize = (s: string) => s
             .toLowerCase()
             .normalize('NFD').replace(/[̀-ͯ]/g, '') // é→e, á→a, ñ→n, ü→u...
-            .replace(/[''`]/g, '')     // apóstrofes
+            .replace(/["'`´‘’“”«»]/g, '') // comillas y apóstrofes: Héctor "El Father" → hector el father
             .replace(/&/g, 'y')       // & → y
             .replace(/\s+/g, ' ').trim();
         const normalizedContent = normalize(content);

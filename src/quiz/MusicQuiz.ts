@@ -17,6 +17,8 @@ const SKIP_CMD = `${config.prefix}vskip`;
 // El quiz reproduce desde 1:30 (el coro): el stream se genera ya empezando ahí,
 // en vez de sonar desde 0:00 y saltar con seek (que re-creaba el stream = doble silencio)
 const QUIZ_SEEK_SECONDS = 90;
+// Silencio entre canciones del quiz para marcar el cambio
+const SONG_GAP_MS = 1500;
 
 // Exportado para que los eventos del player puedan saber si hay un quiz activo
 export const quizGuilds = new Set<string>();
@@ -35,6 +37,8 @@ export class MusicQuiz {
     private artistGuessed = false;
     private guessMode: 'artist' | 'title' | 'both';
     private stopped = false;
+    // true durante la pausa entre canciones: se ignoran respuestas y votos de skip
+    private transitioning = false;
 
     constructor(message: Message, songCount: number, mode: 'artist' | 'title' | 'both') {
         this.textChannel = message.channel as TextChannel;
@@ -108,6 +112,8 @@ export class MusicQuiz {
                 existingQueue.tracks.clear();
                 existingQueue.addTrack(best);
                 existingQueue.node.skip();
+                // La pausa entre canciones dejó el nodo pausado: reanudar con la nueva
+                if (existingQueue.node.isPaused()) existingQueue.node.resume();
             } else {
                 await player.play(this.voiceChannel, best, {
                     nodeOptions: {
@@ -169,6 +175,9 @@ export class MusicQuiz {
             return;
         }
 
+        // Durante la pausa entre canciones ya se mostró la respuesta: no contar nada
+        if (this.transitioning) return;
+
         if (content === SKIP_CMD) {
             this.handleSkip(message.author.id);
             return;
@@ -229,7 +238,7 @@ export class MusicQuiz {
     }
 
     private nextSong(reason: string): void {
-        if (this.stopped) return;
+        if (this.stopped || this.transitioning) return;
         if (this.songTimer) clearTimeout(this.songTimer);
         this.printStatus(reason);
 
@@ -238,8 +247,15 @@ export class MusicQuiz {
             return;
         }
 
-        this.currentIndex++;
-        this.playSong();
+        // Pausa de 1.5s en silencio antes de la siguiente canción
+        this.transitioning = true;
+        useQueue(this.guildId)?.node.pause();
+        setTimeout(() => {
+            this.transitioning = false;
+            if (this.stopped) return;
+            this.currentIndex++;
+            this.playSong();
+        }, SONG_GAP_MS);
     }
 
     private printStatus(reason: string): void {

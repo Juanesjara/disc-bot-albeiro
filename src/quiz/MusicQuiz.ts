@@ -14,9 +14,9 @@ import { prefetchTrack, clearPrefetched } from '../streamer';
 
 const STOP_CMD = `${config.prefix}stop`;
 const SKIP_CMD = `${config.prefix}vskip`;
-// El quiz reproduce desde 1:30 (el coro): el stream se genera ya empezando ahí,
+// El quiz reproduce desde 0:45: el stream se genera ya empezando ahí,
 // en vez de sonar desde 0:00 y saltar con seek (que re-creaba el stream = doble silencio)
-const QUIZ_SEEK_SECONDS = 90;
+const QUIZ_SEEK_SECONDS = 45;
 // Silencio entre canciones del quiz para marcar el cambio
 const SONG_GAP_MS = 1500;
 
@@ -103,7 +103,7 @@ export class MusicQuiz {
             const best = MusicQuiz.pickBest(result.tracks);
             console.log(best.title, best.url);
 
-            // Asegurar que el stream exista YA empezando en 1:30 (si la precarga de la
+            // Asegurar que el stream exista YA empezando en 0:45 (si la precarga de la
             // ronda anterior lo dejó listo, esto es un no-op y la transición es instantánea)
             prefetchTrack(best.url, best.title, QUIZ_SEEK_SECONDS);
 
@@ -126,7 +126,7 @@ export class MusicQuiz {
                 });
             }
 
-            // Mientras suena esta, dejar lista la siguiente (búsqueda + stream en 1:30)
+            // Mientras suena esta, dejar lista la siguiente (búsqueda + stream en 0:45)
             this.prefetchNextSong(player);
 
         } catch (err: any) {
@@ -152,7 +152,7 @@ export class MusicQuiz {
             : pool[0];
     }
 
-    // Precarga (búsqueda + stream desde 1:30) de la siguiente canción del quiz
+    // Precarga (búsqueda + stream desde 0:45) de la siguiente canción del quiz
     // mientras suena la actual, para que la transición sea casi instantánea
     private prefetchNextSong(player: ReturnType<typeof useMainPlayer>): void {
         const next = this.songs[this.currentIndex + 1];
@@ -302,7 +302,7 @@ export class MusicQuiz {
         if (this.songTimer) clearTimeout(this.songTimer);
         if (this.collector) this.collector.stop();
         quizGuilds.delete(this.guildId);
-        // Descartar precargas del quiz: llevan seek a 1:30 y contaminarían un =play normal
+        // Descartar precargas del quiz: llevan seek a 0:45 y contaminarían un =play normal
         clearPrefetched();
         const queue = useQueue(this.guildId);
         queue?.delete();

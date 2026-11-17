@@ -67,7 +67,6 @@ DISCORD_TOKEN=tu_token_de_discord
 
 # Opcionales
 PREFIX==
-DISCORD_OWNER_ID=tu_id_de_discord
 
 # Spotify: solo para `=play` con enlaces de Spotify (hacen falta las dos).
 # Sin ellas el bot arranca igual y el quiz funciona (lee las playlists sin credenciales).

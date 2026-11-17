@@ -1,6 +1,7 @@
 import { Message } from 'discord.js';
 import { useQueue } from 'discord-player';
 import { BotClient, Command } from '../../types';
+import { rejectIfQuizActive } from '../../quiz/MusicQuiz';
 
 const command: Command = {
     name: 'resume',
@@ -9,6 +10,7 @@ const command: Command = {
     usage: 'resume',
     category: 'Music',
     execute(client: BotClient, message: Message) {
+        if (rejectIfQuizActive(message)) return;
         const queue = useQueue(message.guild!.id);
         if (!queue) {
             return message.channel.send(':warning: No hay música en la cola.');

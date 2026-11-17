@@ -1,5 +1,6 @@
 import { Message } from 'discord.js';
 import { BotClient } from '../types';
+import { logSendError } from '../utils/safeSend';
 
 module.exports = async (client: BotClient, message: Message) => {
     if (message.author.bot || !message.guild) return;
@@ -18,6 +19,6 @@ module.exports = async (client: BotClient, message: Message) => {
         await command.execute(client, message, args);
     } catch (error) {
         console.error(`Error ejecutando ${commandName}:`, error);
-        message.channel.send(':warning: Ocurrió un error al ejecutar ese comando.');
+        message.channel.send(':warning: Ocurrió un error al ejecutar ese comando.').catch(logSendError);
     }
 };

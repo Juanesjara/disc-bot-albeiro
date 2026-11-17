@@ -17,6 +17,5 @@ const spotify = spotifyClientId && spotifyClientSecret
 export const config = {
     token: process.env.DISCORD_TOKEN,
     prefix: process.env.PREFIX || '=',
-    ownerId: process.env.DISCORD_OWNER_ID || '',
     spotify,
 };

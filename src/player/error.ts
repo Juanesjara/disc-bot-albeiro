@@ -1,6 +1,7 @@
 import { GuildQueue } from 'discord-player';
 import { TextChannel } from 'discord.js';
 import { QueueMetadata } from '../types';
+import { logSendError } from '../utils/safeSend';
 import { quizGuilds } from '../quiz/MusicQuiz';
 
 module.exports = (queue: GuildQueue<QueueMetadata>, error: Error) => {
@@ -9,5 +10,5 @@ module.exports = (queue: GuildQueue<QueueMetadata>, error: Error) => {
     if (quizGuilds.has(queue.guild.id)) return;
 
     const channel = queue.metadata?.channel as TextChannel;
-    channel?.send(`:warning: Error de conexión: ${error.message}`);
+    channel?.send(`:warning: Error de conexión: ${error.message}`).catch(logSendError);
 };

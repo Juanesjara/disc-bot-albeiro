@@ -1,6 +1,7 @@
 import { Message, GuildMember, TextChannel, EmbedBuilder } from 'discord.js';
 import { useMainPlayer } from 'discord-player';
 import { BotClient, Command } from '../../types';
+import { rejectIfQuizActive } from '../../quiz/MusicQuiz';
 
 function formatViews(views: number): string {
     if (!views) return 'N/A';
@@ -17,6 +18,7 @@ const command: Command = {
     usage: 'search <nombre>',
     category: 'Music',
     async execute(client: BotClient, message: Message, args: string[]) {
+        if (rejectIfQuizActive(message)) return;
         const member = message.member as GuildMember;
         const voiceChannel = member?.voice.channel;
 
@@ -70,6 +72,9 @@ const command: Command = {
             if (isNaN(index) || index < 0 || index >= tracks.length) {
                 return response.channel.send(`:warning: Escribe un número del 1 al ${tracks.length}.`);
             }
+
+            // Pudo arrancar un quiz mientras el usuario elegía
+            if (rejectIfQuizActive(message)) return;
 
             const selected = tracks[index];
             try {

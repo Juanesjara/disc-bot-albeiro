@@ -34,6 +34,13 @@ interface ToolDef {
 
 const noInput: Anthropic.Tool['input_schema'] = { type: 'object', properties: {} };
 
+// Herramienta sin parámetros: el nombre coincide con el del comando
+const simple = (name: string, description: string): ToolDef => ({
+    command: name,
+    tool: { name, description, input_schema: noInput },
+    toArgs: () => [],
+});
+
 const TOOLS: ToolDef[] = [
     {
         command: 'play',
@@ -48,26 +55,10 @@ const TOOLS: ToolDef[] = [
         },
         toArgs: (i) => String(i.query ?? '').trim().split(/ +/g).filter(Boolean),
     },
-    {
-        command: 'skip',
-        tool: { name: 'skip', description: 'Salta la canción que está sonando.', input_schema: noInput },
-        toArgs: () => [],
-    },
-    {
-        command: 'stop',
-        tool: { name: 'stop', description: 'Detiene la música, vacía la cola y desconecta al bot.', input_schema: noInput },
-        toArgs: () => [],
-    },
-    {
-        command: 'pause',
-        tool: { name: 'pause', description: 'Pausa la canción actual.', input_schema: noInput },
-        toArgs: () => [],
-    },
-    {
-        command: 'resume',
-        tool: { name: 'resume', description: 'Reanuda la canción pausada.', input_schema: noInput },
-        toArgs: () => [],
-    },
+    simple('skip', 'Salta la canción que está sonando.'),
+    simple('stop', 'Detiene la música, vacía la cola y desconecta al bot.'),
+    simple('pause', 'Pausa la canción actual.'),
+    simple('resume', 'Reanuda la canción pausada.'),
     {
         command: 'queue',
         tool: {
@@ -80,11 +71,7 @@ const TOOLS: ToolDef[] = [
         },
         toArgs: (i) => (i.page ? [String(i.page)] : []),
     },
-    {
-        command: 'nowplaying',
-        tool: { name: 'nowplaying', description: 'Muestra qué canción está sonando.', input_schema: noInput },
-        toArgs: () => [],
-    },
+    simple('nowplaying', 'Muestra qué canción está sonando.'),
     {
         command: 'volume',
         tool: {
@@ -111,11 +98,7 @@ const TOOLS: ToolDef[] = [
         },
         toArgs: (i) => [String(i.position)],
     },
-    {
-        command: 'clear',
-        tool: { name: 'clear', description: 'Vacía la cola sin detener la canción actual.', input_schema: noInput },
-        toArgs: () => [],
-    },
+    simple('clear', 'Vacía la cola sin detener la canción actual.'),
     {
         command: 'loop',
         tool: {
@@ -134,11 +117,7 @@ const TOOLS: ToolDef[] = [
         },
         toArgs: (i) => (i.mode ? [i.mode] : []),
     },
-    {
-        command: 'shuffle',
-        tool: { name: 'shuffle', description: 'Mezcla la cola en orden aleatorio.', input_schema: noInput },
-        toArgs: () => [],
-    },
+    simple('shuffle', 'Mezcla la cola en orden aleatorio.'),
     {
         command: 'quiz',
         tool: {

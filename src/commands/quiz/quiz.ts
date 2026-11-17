@@ -1,6 +1,7 @@
 import { Message, GuildMember, VoiceChannel } from 'discord.js';
 import { BotClient, Command } from '../../types';
-import { MusicQuiz } from '../../quiz/MusicQuiz';
+import { useQueue } from 'discord-player';
+import { MusicQuiz, quizGuilds } from '../../quiz/MusicQuiz';
 
 const activeQuizzes = new Set<string>();
 
@@ -17,8 +18,15 @@ const command: Command = {
             return message.channel.send(':warning: Debes estar en un canal de voz para iniciar el quiz.');
         }
 
-        if (activeQuizzes.has(message.guild!.id)) {
+        // activeQuizzes cubre la carga de la playlist; quizGuilds, el resto de la partida
+        if (activeQuizzes.has(message.guild!.id) || quizGuilds.has(message.guild!.id)) {
             return message.channel.send(':warning: Ya hay un quiz activo en este servidor.');
+        }
+
+        // Música normal sonando, pausada o en cola: el quiz la borraría sin avisar
+        const queue = useQueue(message.guild!.id);
+        if (queue && (queue.currentTrack || queue.tracks.size > 0)) {
+            return message.channel.send(`:warning: Hay música sonando o en cola. Usa \`${client.prefix}stop\` primero para iniciar el quiz.`);
         }
 
         const [playlistUrl, songCountStr, modeArg] = args;

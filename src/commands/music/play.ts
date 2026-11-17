@@ -1,6 +1,7 @@
 import { Message, GuildMember, TextChannel } from 'discord.js';
 import { useMainPlayer, Track } from 'discord-player';
 import { BotClient, Command } from '../../types';
+import { config } from '../../config/config';
 import { rejectIfQuizActive } from '../../quiz/MusicQuiz';
 
 const REMIX_KEYWORDS = [
@@ -58,6 +59,11 @@ const command: Command = {
         try {
             const isUrl = query.startsWith('http://') || query.startsWith('https://');
             let trackToPlay: any = query;
+
+            // Sin credenciales de Spotify no se registra SpotifyExtractor (ver src/index.ts)
+            if (isUrl && /^https?:\/\/([a-z0-9-]+\.)*spotify\.(com|link)\//i.test(query) && !config.spotify) {
+                return message.channel.send(':warning: Reproducir enlaces de Spotify no está disponible: el bot no tiene credenciales de Spotify configuradas. Usa el nombre de la canción o un enlace de YouTube.');
+            }
 
             if (!isUrl) {
                 const results = await player.search(query, { requestedBy: message.author });

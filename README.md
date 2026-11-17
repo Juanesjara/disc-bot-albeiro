@@ -56,7 +56,7 @@ El prefijo por defecto es `=`. Todos los comandos se usan en el chat de texto.
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) instalado en el sistema
 - FFmpeg instalado en el sistema
 - Aplicación de [Discord](https://discord.com/developers/applications)
-- Aplicación de [Spotify](https://developer.spotify.com/dashboard/applications)
+- Aplicación de [Spotify](https://developer.spotify.com/dashboard/applications) (opcional, solo para `=play` con enlaces de Spotify)
 
 ## Configuración
 
@@ -64,11 +64,14 @@ Crea un archivo `.env` en la raíz del proyecto con las siguientes variables:
 
 ```env
 DISCORD_TOKEN=tu_token_de_discord
-SPOTIFY_CLIENT_ID=tu_client_id_de_spotify
-SPOTIFY_CLIENT_SECRET=tu_client_secret_de_spotify
 
 # Opcionales
 PREFIX==
+
+# Spotify: solo para `=play` con enlaces de Spotify (hacen falta las dos).
+# Sin ellas el bot arranca igual y el quiz funciona (lee las playlists sin credenciales).
+SPOTIFY_CLIENT_ID=tu_client_id_de_spotify
+SPOTIFY_CLIENT_SECRET=tu_client_secret_de_spotify
 
 # Para autenticación de YouTube en servidores cloud (cookies en base64)
 YOUTUBE_COOKIES_B64=

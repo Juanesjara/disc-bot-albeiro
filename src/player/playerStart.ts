@@ -1,6 +1,7 @@
 import { GuildQueue, Track } from 'discord-player';
 import { TextChannel, EmbedBuilder } from 'discord.js';
 import { QueueMetadata } from '../types';
+import { logSendError } from '../utils/safeSend';
 import { quizGuilds } from '../quiz/MusicQuiz';
 
 module.exports = (queue: GuildQueue<QueueMetadata>, track: Track) => {
@@ -21,5 +22,5 @@ module.exports = (queue: GuildQueue<QueueMetadata>, track: Track) => {
         )
         .setThumbnail(track.thumbnail);
 
-    channel.send({ embeds: [embed] });
+    channel.send({ embeds: [embed] }).catch(logSendError);
 };

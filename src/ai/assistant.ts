@@ -180,7 +180,8 @@ export async function handleMention(client: BotClient, message: Message): Promis
         return;
     }
 
-    console.log(`[IA] ${message.author.tag}: "${text}"`);
+    // Solo el autor: nunca el texto del mensaje
+    console.log(`[IA] mención de ${message.author.tag}`);
     const messages: Anthropic.MessageParam[] = [{ role: 'user', content: text }];
     let usedTools = false;
 
@@ -217,7 +218,7 @@ export async function handleMention(client: BotClient, message: Message): Promis
             }
             messages.push({ role: 'user', content: results });
         }
-        console.warn(`[IA] Se alcanzó el máximo de ${MAX_TURNS} vueltas para: "${text}"`);
+        console.warn(`[IA] Se alcanzó el máximo de ${MAX_TURNS} vueltas (autor=${message.author.tag})`);
     } catch (err) {
         if (err instanceof Anthropic.RateLimitError) {
             console.error('[IA] Límite de la API alcanzado:', err.message);
@@ -245,7 +246,7 @@ async function runTool(client: BotClient, message: Message, use: Anthropic.ToolU
     }
 
     const args = def.toArgs(use.input ?? {});
-    console.log(`[IA] → ${def.command} ${args.join(' ')}`);
+    console.log(`[IA] → ${def.command}`);
     try {
         await command.execute(client, message, args);
         return { type: 'tool_result', tool_use_id: use.id, content: 'Ejecutado. El comando ya publicó su resultado en el canal.' };

@@ -1,9 +1,9 @@
 import { Message } from 'discord.js';
 import { BotClient } from '../types';
+import { logSendError } from '../utils/safeSend';
 import { handleMention, mentionRegex } from '../ai/assistant';
 
 module.exports = async (client: BotClient, message: Message) => {
-    console.log(`[MSG] autor=${message.author.tag} guild=${!!message.guild} prefix="${client.prefix}" content="${message.content}" starts=${message.content.startsWith(client.prefix)}`);
     if (message.author.bot || !message.guild) return;
     if (!message.content.startsWith(client.prefix)) {
         // Sin prefijo: si mencionan al bot, se interpreta en lenguaje natural
@@ -12,7 +12,7 @@ module.exports = async (client: BotClient, message: Message) => {
                 await handleMention(client, message);
             } catch (error) {
                 console.error('[IA] Error manejando mención:', error);
-                message.channel.send(':warning: Ocurrió un error al procesar ese mensaje.').catch(() => {});
+                message.channel.send(':warning: Ocurrió un error al procesar ese mensaje.').catch(logSendError);
             }
         }
         return;
@@ -23,13 +23,14 @@ module.exports = async (client: BotClient, message: Message) => {
     if (!commandName) return;
 
     const command = client.commands.get(commandName);
-    console.log(`[CMD] comando="${commandName}" encontrado=${!!command}`);
+    // Solo autor y nombre del comando: nunca los argumentos ni el texto de otros mensajes
+    console.log(`[CMD] autor=${message.author.tag} comando="${commandName}" encontrado=${!!command}`);
     if (!command) return;
 
     try {
         await command.execute(client, message, args);
     } catch (error) {
         console.error(`Error ejecutando ${commandName}:`, error);
-        message.channel.send(':warning: Ocurrió un error al ejecutar ese comando.');
+        message.channel.send(':warning: Ocurrió un error al ejecutar ese comando.').catch(logSendError);
     }
 };

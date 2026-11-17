@@ -12,6 +12,8 @@ export const config = {
     token: process.env.DISCORD_TOKEN,
     prefix: process.env.PREFIX || '=',
     ownerId: process.env.DISCORD_OWNER_ID || '',
+    // Opcional: sin ella el bot arranca igual y solo dejan de funcionar las menciones en lenguaje natural
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
     spotify: {
         clientId: process.env.SPOTIFY_CLIENT_ID,
         clientSecret: process.env.SPOTIFY_CLIENT_SECRET,

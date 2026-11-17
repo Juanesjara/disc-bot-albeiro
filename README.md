@@ -43,6 +43,18 @@ El prefijo por defecto es `=`. Todos los comandos se usan en el chat de texto.
 - `canciones`: entre 1 y 30
 - Modo: `artist` (adivina el artista), `title` (adivina el título), `both` (ambos, por defecto)
 
+### Hablarle en lenguaje natural
+
+También puedes mencionar al bot y pedirle las cosas con tus palabras (requiere `ANTHROPIC_API_KEY`):
+
+- `@bot pon Tusa de Karol G`
+- `@bot salta esta`
+- `@bot qué está sonando`
+- `@bot para la música`
+- `@bot haz un quiz de 10 canciones con esta playlist <url de Spotify>`
+
+Ejecuta los mismos comandos de arriba, con las mismas respuestas. Durante un quiz no toca la música ni revela la canción: usa `=stop` o `=vskip`.
+
 ### Info
 
 | Comando | Alias | Descripción |
@@ -70,6 +82,10 @@ SPOTIFY_CLIENT_SECRET=tu_client_secret_de_spotify
 # Opcionales
 PREFIX==
 DISCORD_OWNER_ID=tu_id_de_discord
+
+# Para hablarle al bot mencionándolo en lenguaje natural (Claude Haiku 4.5).
+# Sin ella el bot funciona igual con los comandos de prefijo.
+ANTHROPIC_API_KEY=
 
 # Para autenticación de YouTube en servidores cloud (cookies en base64)
 YOUTUBE_COOKIES_B64=

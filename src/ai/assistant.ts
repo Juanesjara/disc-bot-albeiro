@@ -1,10 +1,14 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { Message } from 'discord.js';
 import { BotClient } from '../types';
 import { config } from '../config/config';
 import { quizGuilds } from '../quiz/MusicQuiz';
+import { logSendError } from '../utils/safeSend';
+import { parseIntent } from './intents';
 
-const MODEL = 'claude-haiku-4-5';
+// DeepSeek con API compatible con OpenAI: se llama con fetch, sin SDK
+const API_URL = 'https://api.deepseek.com/chat/completions';
+const MODEL = 'deepseek-flash';
+const TIMEOUT_MS = 20_000;
 // Tope de vueltas modelo → herramientas por mención, para que una frase rara no se convierta en un bucle
 const MAX_TURNS = 4;
 
@@ -27,31 +31,27 @@ responde en una sola línea que solo sabes: ${CAPABILITIES}.
 // Cada herramienta mapea a un comando existente: se ejecuta ese comando con el mensaje original,
 // así la validación, la lógica y los mensajes al canal son exactamente los de su versión con prefijo.
 interface ToolDef {
-    tool: Anthropic.Tool;
-    command: string;
+    name: string;
+    description: string;
+    parameters: Record<string, any>;
     toArgs: (input: any) => string[];
 }
 
-const noInput: Anthropic.Tool['input_schema'] = { type: 'object', properties: {} };
+const noInput = { type: 'object', properties: {} };
 
 // Herramienta sin parámetros: el nombre coincide con el del comando
 const simple = (name: string, description: string): ToolDef => ({
-    command: name,
-    tool: { name, description, input_schema: noInput },
-    toArgs: () => [],
+    name, description, parameters: noInput, toArgs: () => [],
 });
 
 const TOOLS: ToolDef[] = [
     {
-        command: 'play',
-        tool: {
-            name: 'play',
-            description: 'Busca y reproduce una canción (o la añade a la cola). Acepta nombre + artista o una URL.',
-            input_schema: {
-                type: 'object',
-                properties: { query: { type: 'string', description: 'Nombre y artista de la canción, o URL' } },
-                required: ['query'],
-            },
+        name: 'play',
+        description: 'Busca y reproduce una canción (o la añade a la cola). Acepta nombre + artista o una URL.',
+        parameters: {
+            type: 'object',
+            properties: { query: { type: 'string', description: 'Nombre y artista de la canción, o URL' } },
+            required: ['query'],
         },
         toArgs: (i) => String(i.query ?? '').trim().split(/ +/g).filter(Boolean),
     },
@@ -60,58 +60,46 @@ const TOOLS: ToolDef[] = [
     simple('pause', 'Pausa la canción actual.'),
     simple('resume', 'Reanuda la canción pausada.'),
     {
-        command: 'queue',
-        tool: {
-            name: 'queue',
-            description: 'Muestra la cola de reproducción.',
-            input_schema: {
-                type: 'object',
-                properties: { page: { type: 'integer', description: 'Página de la cola (por defecto 1)' } },
-            },
+        name: 'queue',
+        description: 'Muestra la cola de reproducción.',
+        parameters: {
+            type: 'object',
+            properties: { page: { type: 'integer', description: 'Página de la cola (por defecto 1)' } },
         },
         toArgs: (i) => (i.page ? [String(i.page)] : []),
     },
     simple('nowplaying', 'Muestra qué canción está sonando.'),
     {
-        command: 'volume',
-        tool: {
-            name: 'volume',
-            description: 'Cambia el volumen.',
-            input_schema: {
-                type: 'object',
-                properties: { level: { type: 'integer', description: 'Volumen de 1 a 100' } },
-                required: ['level'],
-            },
+        name: 'volume',
+        description: 'Cambia el volumen.',
+        parameters: {
+            type: 'object',
+            properties: { level: { type: 'integer', description: 'Volumen de 1 a 100' } },
+            required: ['level'],
         },
         toArgs: (i) => [String(i.level)],
     },
     {
-        command: 'remove',
-        tool: {
-            name: 'remove',
-            description: 'Quita una canción de la cola por su posición (1 = la siguiente en sonar).',
-            input_schema: {
-                type: 'object',
-                properties: { position: { type: 'integer', description: 'Posición en la cola, empezando en 1' } },
-                required: ['position'],
-            },
+        name: 'remove',
+        description: 'Quita una canción de la cola por su posición (1 = la siguiente en sonar).',
+        parameters: {
+            type: 'object',
+            properties: { position: { type: 'integer', description: 'Posición en la cola, empezando en 1' } },
+            required: ['position'],
         },
         toArgs: (i) => [String(i.position)],
     },
     simple('clear', 'Vacía la cola sin detener la canción actual.'),
     {
-        command: 'loop',
-        tool: {
-            name: 'loop',
-            description: 'Cambia el modo de repetición. Sin modo, informa el modo actual.',
-            input_schema: {
-                type: 'object',
-                properties: {
-                    mode: {
-                        type: 'string',
-                        enum: ['off', 'track', 'queue'],
-                        description: 'off = sin repetir, track = repetir la canción, queue = repetir la cola',
-                    },
+        name: 'loop',
+        description: 'Cambia el modo de repetición. Sin modo, informa el modo actual.',
+        parameters: {
+            type: 'object',
+            properties: {
+                mode: {
+                    type: 'string',
+                    enum: ['off', 'track', 'queue'],
+                    description: 'off = sin repetir, track = repetir la canción, queue = repetir la cola',
                 },
             },
         },
@@ -119,36 +107,30 @@ const TOOLS: ToolDef[] = [
     },
     simple('shuffle', 'Mezcla la cola en orden aleatorio.'),
     {
-        command: 'quiz',
-        tool: {
-            name: 'quiz',
-            description: 'Inicia un quiz musical con una playlist pública de Spotify. Requiere la URL y el número de canciones.',
-            input_schema: {
-                type: 'object',
-                properties: {
-                    playlist_url: { type: 'string', description: 'URL de la playlist de Spotify, tal como la escribió el usuario' },
-                    song_count: { type: 'integer', description: 'Número de canciones, de 1 a 30' },
-                    mode: {
-                        type: 'string',
-                        enum: ['artist', 'title', 'both'],
-                        description: 'Qué hay que adivinar. Por defecto both.',
-                    },
+        name: 'quiz',
+        description: 'Inicia un quiz musical con una playlist pública de Spotify. Requiere la URL y el número de canciones.',
+        parameters: {
+            type: 'object',
+            properties: {
+                playlist_url: { type: 'string', description: 'URL de la playlist de Spotify, tal como la escribió el usuario' },
+                song_count: { type: 'integer', description: 'Número de canciones, de 1 a 30' },
+                mode: {
+                    type: 'string',
+                    enum: ['artist', 'title', 'both'],
+                    description: 'Qué hay que adivinar. Por defecto both.',
                 },
-                required: ['playlist_url', 'song_count'],
             },
+            required: ['playlist_url', 'song_count'],
         },
         toArgs: (i) => [String(i.playlist_url), String(i.song_count), ...(i.mode ? [i.mode] : [])],
     },
 ];
 
-const TOOLS_BY_NAME = new Map(TOOLS.map(t => [t.tool.name, t]));
-
-let anthropic: Anthropic | null = null;
-function getClient(): Anthropic | null {
-    if (!config.anthropicApiKey) return null;
-    if (!anthropic) anthropic = new Anthropic({ apiKey: config.anthropicApiKey });
-    return anthropic;
-}
+const TOOLS_BY_NAME = new Map(TOOLS.map(t => [t.name, t]));
+const API_TOOLS = TOOLS.map(t => ({
+    type: 'function',
+    function: { name: t.name, description: t.description, parameters: t.parameters },
+}));
 
 // Solo cuenta la mención escrita explícitamente (<@id> o <@!id>), no las respuestas a mensajes del bot
 export function mentionRegex(botId: string): RegExp {
@@ -159,10 +141,15 @@ function quizWarning(): string {
     return `:warning: Hay un quiz activo. Durante el quiz no puedo tocar la música; usa \`${config.prefix}stop\` para terminarlo o \`${config.prefix}vskip\` para votar saltar.`;
 }
 
+// El texto de la IA nunca debe poder mencionar a @everyone, roles ni usuarios
+function sendPlain(message: Message, content: string) {
+    return message.channel.send({ content: content.slice(0, 2000), allowedMentions: { parse: [] } });
+}
+
 export async function handleMention(client: BotClient, message: Message): Promise<void> {
     const guildId = message.guild!.id;
 
-    // Durante el quiz no se llama a la IA: así no hay forma de que revele la canción ni toque la cola
+    // Durante el quiz no se interpreta nada: así no hay forma de que se revele la canción ni se toque la cola
     if (quizGuilds.has(guildId)) {
         await message.channel.send(quizWarning());
         return;
@@ -174,85 +161,129 @@ export async function handleMention(client: BotClient, message: Message): Promis
         return;
     }
 
-    const ai = getClient();
-    if (!ai) {
-        await message.channel.send(`:warning: La IA no está configurada. Usa los comandos con \`${config.prefix}\` (\`${config.prefix}help\`).`);
+    // 1) Reglas: las frases comunes se entienden gratis y al instante
+    const intent = parseIntent(text);
+    if (intent && 'ask' in intent) {
+        await message.channel.send(intent.ask);
+        return;
+    }
+    if (intent && 'command' in intent) {
+        console.log(`[IA] regla → ${intent.command} (autor=${message.author.tag})`);
+        await runCommand(client, message, intent.command, intent.args);
         return;
     }
 
+    // 2) Sin regla: decide la IA, si está configurada
+    if (!config.deepseekApiKey) {
+        await message.channel.send(`:warning: No entendí. Puedo ${CAPABILITIES}. Prueba con algo como "pon Tusa de Karol G" o usa \`${config.prefix}help\`.`);
+        return;
+    }
+    await askModel(client, message, text);
+}
+
+async function askModel(client: BotClient, message: Message, text: string): Promise<void> {
     // Solo el autor: nunca el texto del mensaje
-    console.log(`[IA] mención de ${message.author.tag}`);
-    const messages: Anthropic.MessageParam[] = [{ role: 'user', content: text }];
+    console.log(`[IA] modelo (autor=${message.author.tag})`);
+    const messages: any[] = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: text },
+    ];
     let usedTools = false;
 
     try {
         for (let turn = 0; turn < MAX_TURNS; turn++) {
-            const response = await ai.messages.create({
-                model: MODEL,
-                max_tokens: 1024,
-                system: SYSTEM_PROMPT,
-                tools: TOOLS.map(t => t.tool),
-                messages,
-            });
+            const reply = await callModel(messages);
+            const toolCalls: any[] = reply.tool_calls ?? [];
 
-            const toolUses = response.content.filter(
-                (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
-            );
-
-            if (response.stop_reason !== 'tool_use' || !toolUses.length) {
+            if (!toolCalls.length) {
                 // El texto propio de la IA solo se publica si no ejecutó nada (aclaraciones, pedir datos, fuera de alcance);
                 // si ejecutó acciones, los comandos ya respondieron en el canal
-                const reply = response.content
-                    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-                    .map(b => b.text).join(' ').trim();
-                if (!usedTools && reply) await message.channel.send(reply.slice(0, 2000));
+                const content = String(reply.content ?? '').trim();
+                if (!usedTools && content) await sendPlain(message, content);
                 return;
             }
 
-            messages.push({ role: 'assistant', content: response.content });
-            const results: Anthropic.ToolResultBlockParam[] = [];
+            messages.push({ role: 'assistant', content: reply.content ?? '', tool_calls: toolCalls });
             // En orden y de una en una: "pon X y sube el volumen" depende del orden
-            for (const use of toolUses) {
-                results.push(await runTool(client, message, use));
+            for (const call of toolCalls) {
+                const result = await runToolCall(client, message, call);
                 usedTools = true;
+                messages.push({ role: 'tool', tool_call_id: call.id, content: result });
             }
-            messages.push({ role: 'user', content: results });
         }
         console.warn(`[IA] Se alcanzó el máximo de ${MAX_TURNS} vueltas (autor=${message.author.tag})`);
-    } catch (err) {
-        if (err instanceof Anthropic.RateLimitError) {
-            console.error('[IA] Límite de la API alcanzado:', err.message);
-            await message.channel.send(':warning: La IA está saturada ahora mismo. Prueba en un rato o usa los comandos con `' + config.prefix + '`.');
-        } else if (err instanceof Anthropic.AuthenticationError) {
-            console.error('[IA] Clave de Anthropic inválida:', err.message);
-            await message.channel.send(':warning: La IA no está bien configurada. Usa los comandos con `' + config.prefix + '`.');
-        } else {
-            console.error('[IA] Error:', (err as any)?.message ?? err);
-            await message.channel.send(':warning: No pude entender eso ahora mismo. Prueba de nuevo o usa los comandos con `' + config.prefix + '`.');
-        }
+    } catch (err: any) {
+        console.error('[IA] Error:', err?.message ?? err);
+        // Si ya se ejecutó alguna acción, su comando ya respondió: un aviso de "no entendí" confundiría
+        if (usedTools) return;
+        const status = err?.status;
+        const msg = status === 402 ? ':warning: Se acabó el saldo de la IA. Las frases simples y los comandos con `' + config.prefix + '` siguen funcionando.'
+            : status === 401 ? ':warning: La IA no está bien configurada. Usa los comandos con `' + config.prefix + '`.'
+            : status === 429 || status === 503 ? ':warning: La IA está saturada ahora mismo. Prueba en un rato o usa los comandos con `' + config.prefix + '`.'
+            : ':warning: No pude entender eso ahora mismo. Prueba de nuevo o usa los comandos con `' + config.prefix + '`.';
+        await message.channel.send(msg).catch(logSendError);
     }
 }
 
-async function runTool(client: BotClient, message: Message, use: Anthropic.ToolUseBlock): Promise<Anthropic.ToolResultBlockParam> {
-    const def = TOOLS_BY_NAME.get(use.name);
-    const command = def && client.commands.get(def.command);
-    if (!def || !command) {
-        return { type: 'tool_result', tool_use_id: use.id, content: `Herramienta desconocida: ${use.name}`, is_error: true };
+async function callModel(messages: any[]): Promise<any> {
+    const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${config.deepseekApiKey}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            model: MODEL,
+            messages,
+            tools: API_TOOLS,
+            tool_choice: 'auto',
+            // Sin razonamiento: más rápido y barato, y basta para mapear una frase a comandos
+            thinking: { type: 'disabled' },
+            max_tokens: 1024,
+        }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw Object.assign(new Error(`DeepSeek respondió ${res.status}: ${body.slice(0, 200)}`), { status: res.status });
     }
+    const data: any = await res.json();
+    const message = data?.choices?.[0]?.message;
+    if (!message) throw new Error('Respuesta de DeepSeek sin mensaje');
+    return message;
+}
+
+async function runToolCall(client: BotClient, message: Message, call: any): Promise<string> {
+    const def = TOOLS_BY_NAME.get(call?.function?.name);
+    if (!def) return `Error: herramienta desconocida ${call?.function?.name}`;
+
+    // La API puede devolver argumentos que no son JSON válido: se trata como error de esa herramienta
+    let input: any;
+    try {
+        input = JSON.parse(call.function.arguments || '{}');
+    } catch {
+        return 'Error: argumentos inválidos.';
+    }
+    return runCommand(client, message, def.name, def.toArgs(input ?? {}));
+}
+
+/** Ejecuta el comando con prefijo equivalente con el mensaje original. Devuelve el resultado para la IA. */
+async function runCommand(client: BotClient, message: Message, name: string, args: string[]): Promise<string> {
+    const command = client.commands.get(name);
+    if (!command) return `Error: comando desconocido ${name}`;
 
     // Una acción anterior de esta misma mención pudo arrancar un quiz: a partir de ahí no se toca nada
     if (quizGuilds.has(message.guild!.id)) {
-        return { type: 'tool_result', tool_use_id: use.id, content: 'Hay un quiz activo; acción bloqueada.', is_error: true };
+        return 'Error: hay un quiz activo; acción bloqueada.';
     }
 
-    const args = def.toArgs(use.input ?? {});
-    console.log(`[IA] → ${def.command}`);
+    console.log(`[IA] → ${name}`);
     try {
         await command.execute(client, message, args);
-        return { type: 'tool_result', tool_use_id: use.id, content: 'Ejecutado. El comando ya publicó su resultado en el canal.' };
+        return 'Ejecutado. El comando ya publicó su resultado en el canal.';
     } catch (err) {
-        console.error(`[IA] Error ejecutando ${def.command}:`, err);
-        await message.channel.send(':warning: Ocurrió un error al ejecutar ese comando.');
-        return { type: 'tool_result', tool_use_id: use.id, content: 'Falló al ejecutarse.', is_error: true };
+        console.error(`[IA] Error ejecutando ${name}:`, err);
+        await message.channel.send(':warning: Ocurrió un error al ejecutar ese comando.').catch(logSendError);
+        return 'Error: falló al ejecutarse.';
     }
 }

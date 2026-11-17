@@ -45,7 +45,7 @@ El prefijo por defecto es `=`. Todos los comandos se usan en el chat de texto.
 
 ### Hablarle en lenguaje natural
 
-También puedes mencionar al bot y pedirle las cosas con tus palabras (requiere `ANTHROPIC_API_KEY`):
+También puedes mencionar al bot y pedirle las cosas con tus palabras:
 
 - `@bot pon Tusa de Karol G`
 - `@bot salta esta`
@@ -53,7 +53,7 @@ También puedes mencionar al bot y pedirle las cosas con tus palabras (requiere 
 - `@bot para la música`
 - `@bot haz un quiz de 10 canciones con esta playlist <url de Spotify>`
 
-Ejecuta los mismos comandos de arriba, con las mismas respuestas. Durante un quiz no toca la música ni revela la canción: usa `=stop` o `=vskip`.
+Ejecuta los mismos comandos de arriba, con las mismas respuestas. Las frases comunes se entienden con reglas, gratis y al instante; solo las que no encajan se mandan a la IA (DeepSeek), y solo si configuraste `DEEPSEEK_API_KEY`. Durante un quiz no toca la música ni revela la canción: usa `=stop` o `=vskip`.
 
 ### Info
 
@@ -85,9 +85,9 @@ PREFIX==
 SPOTIFY_CLIENT_ID=tu_client_id_de_spotify
 SPOTIFY_CLIENT_SECRET=tu_client_secret_de_spotify
 
-# Para hablarle al bot mencionándolo en lenguaje natural (Claude Haiku 4.5).
-# Sin ella el bot funciona igual con los comandos de prefijo.
-ANTHROPIC_API_KEY=
+# Opcional: IA (DeepSeek) para las frases que las reglas no entienden al mencionar al bot.
+# Sin ella las menciones entienden las frases comunes y los comandos con prefijo funcionan igual.
+DEEPSEEK_API_KEY=
 
 # Para autenticación de YouTube en servidores cloud (cookies en base64)
 YOUTUBE_COOKIES_B64=

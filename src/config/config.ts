@@ -17,7 +17,7 @@ const spotify = spotifyClientId && spotifyClientSecret
 export const config = {
     token: process.env.DISCORD_TOKEN,
     prefix: process.env.PREFIX || '=',
-    // Opcional: sin ella el bot arranca igual y solo dejan de funcionar las menciones en lenguaje natural
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+    // Opcional: sin ella las menciones solo entienden las frases comunes (reglas) y no se llama a la IA
+    deepseekApiKey: process.env.DEEPSEEK_API_KEY || '',
     spotify,
 };

@@ -65,7 +65,7 @@ export class MusicQuiz {
         try {
             const allSongs = await spotify.getPlaylistSongs(playlistUrl);
             if (!allSongs.length) {
-                this.send(':warning: Esta playlist no tiene canciones o no es pública.');
+                void this.send(':warning: Esta playlist no tiene canciones o no es pública.');
                 return;
             }
             this.songs = allSongs
@@ -76,7 +76,7 @@ export class MusicQuiz {
             const msg = (err?.statusCode ?? err?.status) === 404
                 ? ':warning: No pude acceder a esa playlist. Los Blend de Spotify son privados y no son compatibles. Usa una playlist pública.'
                 : ':warning: No pude obtener la playlist. Verifica que sea pública.';
-            this.send(msg);
+            void this.send(msg);
             return;
         }
 
@@ -281,7 +281,7 @@ export class MusicQuiz {
             return;
         }
 
-        this.send(`⏭ Votos para saltar: **(${votes}/${needed})**`);
+        void this.send(`⏭ Votos para saltar: **(${votes}/${needed})**`);
     }
 
     private nextSong(reason: string): void {
@@ -315,7 +315,7 @@ export class MusicQuiz {
             .setDescription(`> **${song.title}** — **${song.artist}**\n> [Link Spotify](${song.spotifyUrl})`)
             .addFields({ name: ':trophy: Puntajes', value: this.getScores() || 'Sin puntajes' });
 
-        this.send({ embeds: [embed] });
+        void this.send({ embeds: [embed] });
     }
 
     // Enviar al canal sin que un fallo (p. ej. sin permisos) corte el quiz

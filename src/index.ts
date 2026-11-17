@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits, Collection } from 'discord.js';
-import { Player } from 'discord-player';
+import { Player, onBeforeCreateStream } from 'discord-player';
 import { SpotifyExtractor, AttachmentExtractor } from '@discord-player/extractor';
 import { YoutubeExtractor } from 'discord-player-youtubei';
 import { initStreamer, spawnStream, takePrefetched, prefetchTrack, clearPrefetched } from './streamer';
@@ -7,6 +7,16 @@ import path from 'path';
 import fs from 'fs';
 import { config } from './config/config';
 import { BotClient, Command } from './types';
+import { quizGuilds, QUIZ_SEEK_SECONDS } from './quiz/MusicQuiz';
+
+// Un error puntual (mensaje que no se pudo enviar, stream roto...) no debe tumbar el bot:
+// en Node 22 un rechazo sin capturar mata el proceso. Se registra y se sigue.
+process.on('unhandledRejection', (reason: any) => {
+    console.error('[Proceso] Promesa rechazada sin capturar:', reason?.stack ?? reason);
+});
+process.on('uncaughtException', (err: any) => {
+    console.error('[Proceso] Excepción no capturada:', err?.stack ?? err);
+});
 
 const client = new Client({
     intents: [
@@ -40,12 +50,35 @@ client.prefix = config.prefix;
     }
 
     // YouTube: yt-dlp descarga y streamea el audio directamente (ver src/streamer.ts).
-    // Si hay un stream precargado (siguiente de la cola / quiz), se usa al instante.
     initStreamer(hasCookies ? cookiesFile : null);
+
+    // Hook global (aplica a todas las colas): es el único punto donde discord-player
+    // entrega track + cola juntos. createStream del extractor no recibe la cola y
+    // track.queue no sirve ahí (busca en queue.tracks y el track ya salió de la cola).
+    // Con el servidor conocido: precarga por servidor y seek del quiz solo en su servidor.
+    onBeforeCreateStream(async (track: any, _queryType, queue: any) => {
+        const guildId: string | undefined = queue?.guild?.id;
+        // Tracks que no son de YouTube (p. ej. Spotify) se resuelven por el extractor (bridge)
+        if (!guildId || track?.source !== 'youtube' || !track.url) return null;
+
+        const seek = quizGuilds.has(guildId) ? QUIZ_SEEK_SECONDS : 0;
+        let stream = takePrefetched(guildId, track.url, seek);
+        if (!stream) {
+            console.log(`[Stream] Iniciando pipe de yt-dlp para: ${track.title ?? track.url}`);
+            stream = spawnStream(track.url, track.title, seek);
+        }
+        // Si yt-dlp falla después de entregar el stream, discord-player solo ve que se
+        // acabó el audio: avisar como playerError para que el quiz/música reaccionen.
+        stream.once('error', (err: Error) => {
+            queue.emit('playerError', queue, err, track);
+        });
+        return stream;
+    });
+
+    // El extractor sigue buscando en YouTube; su createStream solo se usa para tracks
+    // puenteados (Spotify → YouTube), que no pasan por el hook de arriba.
     await player.extractors.register(YoutubeExtractor, {
         createStream: async (track: any) => {
-            const cached = takePrefetched(track.url);
-            if (cached) return cached;
             console.log(`[Stream] Iniciando pipe de yt-dlp para: ${track.title ?? track.url}`);
             return spawnStream(track.url, track.title);
         },
@@ -95,10 +128,26 @@ client.prefix = config.prefix;
     // Precargar la siguiente canción de la cola mientras suena la actual
     // (las del quiz se precargan desde MusicQuiz con su propio seek)
     player.events.on('playerStart', (queue: any) => {
+        const guildId = queue?.guild?.id;
+        if (!guildId || quizGuilds.has(guildId)) return;
         const next = queue?.tracks?.at?.(0) ?? queue?.tracks?.data?.[0];
-        if (next?.url) prefetchTrack(next.url, next.title);
+        if (next?.url && next.source === 'youtube') prefetchTrack(guildId, next.url, next.title);
     });
-    player.events.on('emptyQueue', () => clearPrefetched());
+    // Limpiar solo las precargas de ESE servidor. Durante el quiz, la cola se queda
+    // vacía entre canciones: no tocar sus precargas (MusicQuiz.cleanup las limpia).
+    player.events.on('emptyQueue', (queue: any) => {
+        const guildId = queue?.guild?.id;
+        if (guildId && !quizGuilds.has(guildId)) clearPrefetched(guildId);
+    });
+    player.events.on('queueDelete', (queue: any) => {
+        const guildId = queue?.guild?.id;
+        if (guildId) clearPrefetched(guildId);
+    });
 
-    client.login(config.token);
-})();
+    await client.login(config.token);
+})().catch((err) => {
+    // Un fallo al arrancar (token inválido, extractor que no carga) sí debe tumbar el proceso
+    // para que Railway lo reinicie, en vez de quedar vivo sin conectarse
+    console.error('[Proceso] Error fatal en el arranque:', err?.stack ?? err);
+    process.exit(1);
+});

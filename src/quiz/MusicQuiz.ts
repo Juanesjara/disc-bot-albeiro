@@ -6,18 +6,19 @@ import {
     GuildMember,
     EmbedBuilder,
 } from 'discord.js';
-import { useMainPlayer, useQueue, Track } from 'discord-player';
+import { useMainPlayer, useQueue, Track, GuildQueue } from 'discord-player';
 import { SpotifyService } from '../services/spotify';
 import { Song } from '../types';
 import { config } from '../config/config';
 import { prefetchTrack, clearPrefetched } from '../streamer';
+import { logSendError } from '../utils/safeSend';
 import { matchesAnswer, isBlankAnswer, buildScoreboard } from './answers';
 
 const STOP_CMD = `${config.prefix}stop`;
 const SKIP_CMD = `${config.prefix}vskip`;
 // El quiz reproduce desde 0:45: el stream se genera ya empezando ahí,
 // en vez de sonar desde 0:00 y saltar con seek (que re-creaba el stream = doble silencio)
-const QUIZ_SEEK_SECONDS = 45;
+export const QUIZ_SEEK_SECONDS = 45;
 // Silencio entre canciones del quiz para marcar el cambio
 const SONG_GAP_MS = 1500;
 
@@ -27,7 +28,7 @@ export const quizGuilds = new Set<string>();
 // Para comandos de música: si hay quiz en el servidor, avisa y devuelve true (el comando no debe ejecutarse)
 export function rejectIfQuizActive(message: Message): boolean {
     if (!quizGuilds.has(message.guild!.id)) return false;
-    message.channel.send(':warning: Hay un quiz activo, este comando no está disponible hasta que termine.');
+    message.channel.send(':warning: Hay un quiz activo, este comando no está disponible hasta que termine.').catch(logSendError);
     return true;
 }
 
@@ -47,6 +48,10 @@ export class MusicQuiz {
     private stopped = false;
     // true durante la pausa entre canciones: se ignoran respuestas y votos de skip
     private transitioning = false;
+    // URL de la canción que debería estar sonando (para ignorar errores de otras)
+    private currentUrl: string | null = null;
+    // Listener de playerError de este quiz (se quita en cleanup)
+    private playerErrorListener: ((queue: GuildQueue, error: Error, track: Track) => void) | null = null;
 
     constructor(message: Message, mode: 'artist' | 'title' | 'both') {
         this.textChannel = message.channel as TextChannel;
@@ -60,7 +65,7 @@ export class MusicQuiz {
         try {
             const allSongs = await spotify.getPlaylistSongs(playlistUrl);
             if (!allSongs.length) {
-                this.textChannel.send(':warning: Esta playlist no tiene canciones o no es pública.');
+                void this.send(':warning: Esta playlist no tiene canciones o no es pública.');
                 return;
             }
             this.songs = allSongs
@@ -71,7 +76,7 @@ export class MusicQuiz {
             const msg = (err?.statusCode ?? err?.status) === 404
                 ? ':warning: No pude acceder a esa playlist. Los Blend de Spotify son privados y no son compatibles. Usa una playlist pública.'
                 : ':warning: No pude obtener la playlist. Verifica que sea pública.';
-            this.textChannel.send(msg);
+            void this.send(msg);
             return;
         }
 
@@ -82,14 +87,27 @@ export class MusicQuiz {
         });
         this.collector.on('collect', (m) => this.handleMessage(m));
 
-        await this.textChannel.send(this.buildStartMessage());
+        // Si el audio de una canción falla (yt-dlp, ffmpeg...), pasar a la siguiente
+        // en vez de quedarse 60 s en silencio. El aviso no revela la canción.
+        this.playerErrorListener = (queue, error, track) => {
+            if (queue?.guild?.id !== this.guildId) return;
+            if (this.stopped || this.transitioning) return;
+            // Sin canción en curso (buscando la siguiente) ningún error puede ser de esta ronda
+            if (!this.currentUrl || track?.url !== this.currentUrl) return;
+            console.error('[Quiz] Falló el audio de la canción, pasando a la siguiente:', error?.message ?? error);
+            this.nextSong('Error al reproducir, pasando a la siguiente.');
+        };
+        useMainPlayer().events.on('playerError', this.playerErrorListener);
+
+        await this.send(this.buildStartMessage());
         await this.playSong();
     }
 
     private async playSong(): Promise<void> {
         if (this.stopped) return;
 
-        const song = this.songs[this.currentIndex];
+        const index = this.currentIndex;
+        const song = this.songs[index];
         // Lo que no se pide en este modo, o queda vacío tras limpiar (p. ej. "(Intro)"),
         // se da por adivinado: nadie puede acertarlo y la ronda puede cerrarse con lo demás
         this.titleGuessed = this.guessMode === 'artist' || isBlankAnswer(song.title);
@@ -99,12 +117,15 @@ export class MusicQuiz {
         }
         this.skippers.clear();
 
+        this.currentUrl = null;
+
         // Si en este modo no queda nada que adivinar, no tiene sentido esperar 60 s
         if (this.titleGuessed && this.artistGuessed) {
             return this.nextSong('No hay nada que adivinar en esta canción, pasando a la siguiente.');
         }
 
-        await this.textChannel.send(`:musical_note: Canción **${this.currentIndex + 1}/${this.songs.length}** — ¡Adivina!`);
+        await this.send(`:musical_note: Canción **${index + 1}/${this.songs.length}** — ¡Adivina!`);
+        if (this.stopped) return;
 
         const player = useMainPlayer();
         // Buscar en YouTube por título+artista; filtrar remixes y elegir la versión más vista
@@ -112,7 +133,8 @@ export class MusicQuiz {
 
         try {
             const result = await player.search(query);
-
+            // =stop durante la búsqueda: no volver a entrar al canal ni revelar la canción
+            if (this.stopped) return;
 
             if (!result.hasTracks()) {
                 return this.nextSong('No encontré esta canción en YouTube, pasando a la siguiente.');
@@ -123,13 +145,16 @@ export class MusicQuiz {
 
             // Asegurar que el stream exista YA empezando en 0:45 (si la precarga de la
             // ronda anterior lo dejó listo, esto es un no-op y la transición es instantánea)
-            prefetchTrack(best.url, best.title, QUIZ_SEEK_SECONDS);
+            this.currentUrl = best.url;
+            prefetchTrack(this.guildId, best.url, best.title, QUIZ_SEEK_SECONDS);
 
             const existingQueue = useQueue(this.guildId);
             if (existingQueue) {
                 existingQueue.tracks.clear();
                 existingQueue.addTrack(best);
-                existingQueue.node.skip();
+                // Si la anterior falló o terminó, no hay nada que saltar: arrancar la nueva
+                if (existingQueue.isPlaying()) existingQueue.node.skip();
+                else await existingQueue.node.play();
                 // La pausa entre canciones dejó el nodo pausado: reanudar con la nueva
                 if (existingQueue.node.isPaused()) existingQueue.node.resume();
             } else {
@@ -152,9 +177,11 @@ export class MusicQuiz {
             return this.nextSong('Error al reproducir, pasando a la siguiente.');
         }
 
-        // Verificar si el quiz fue detenido mientras esperábamos el stream
-        if (this.stopped) return;
+        // Verificar si el quiz fue detenido mientras esperábamos el stream, o si la
+        // canción ya falló y se pasó a otra (playerError durante el play)
+        if (this.stopped || this.transitioning || this.currentIndex !== index) return;
 
+        if (this.songTimer) clearTimeout(this.songTimer);
         this.songTimer = setTimeout(() => {
             this.nextSong(':alarm_clock: ¡Se acabó el tiempo! No adivinaron la canción.');
         }, 60_000);
@@ -179,7 +206,7 @@ export class MusicQuiz {
             .then(res => {
                 if (this.stopped || !res.hasTracks()) return;
                 const best = MusicQuiz.pickBest(res.tracks);
-                prefetchTrack(best.url, best.title, QUIZ_SEEK_SECONDS);
+                prefetchTrack(this.guildId, best.url, best.title, QUIZ_SEEK_SECONDS);
             })
             .catch(() => {});
     }
@@ -254,7 +281,7 @@ export class MusicQuiz {
             return;
         }
 
-        this.textChannel.send(`⏭ Votos para saltar: **(${votes}/${needed})**`);
+        void this.send(`⏭ Votos para saltar: **(${votes}/${needed})**`);
     }
 
     private nextSong(reason: string): void {
@@ -274,7 +301,9 @@ export class MusicQuiz {
             this.transitioning = false;
             if (this.stopped) return;
             this.currentIndex++;
-            this.playSong();
+            this.playSong().catch((err: any) => {
+                console.error('[Quiz] Error inesperado al pasar de canción:', err?.message ?? err);
+            });
         }, SONG_GAP_MS);
     }
 
@@ -286,7 +315,12 @@ export class MusicQuiz {
             .setDescription(`> **${song.title}** — **${song.artist}**\n> [Link Spotify](${song.spotifyUrl})`)
             .addFields({ name: ':trophy: Puntajes', value: this.getScores() || 'Sin puntajes' });
 
-        this.textChannel.send({ embeds: [embed] });
+        void this.send({ embeds: [embed] });
+    }
+
+    // Enviar al canal sin que un fallo (p. ej. sin permisos) corte el quiz
+    private send(content: Parameters<TextChannel['send']>[0]): Promise<unknown> {
+        return this.textChannel.send(content).catch(logSendError);
     }
 
     private getScores(): string {
@@ -321,8 +355,12 @@ export class MusicQuiz {
         if (this.songTimer) clearTimeout(this.songTimer);
         if (this.collector) this.collector.stop();
         quizGuilds.delete(this.guildId);
-        // Descartar precargas del quiz: llevan seek a 0:45 y contaminarían un =play normal
-        clearPrefetched();
+        if (this.playerErrorListener) {
+            useMainPlayer().events.off('playerError', this.playerErrorListener);
+            this.playerErrorListener = null;
+        }
+        // Descartar las precargas del quiz de ESTE servidor (no las de otros)
+        clearPrefetched(this.guildId);
         const queue = useQueue(this.guildId);
         queue?.delete();
     }

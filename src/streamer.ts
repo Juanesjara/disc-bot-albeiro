@@ -13,7 +13,7 @@ import ffmpegPath from 'ffmpeg-static';
 //   0:00 y luego saltar con node.seek() (que re-crea el stream desde cero).
 // - Precarga: prefetchTrack() arranca el stream de la siguiente canción mientras
 //   suena la actual; createStream lo recoge con takePrefetched() → transición
-//   casi instantánea.
+//   casi instantánea. La cache es por servidor y distingue el seek.
 // ==========================================================================
 
 interface CacheEntry {
@@ -23,8 +23,7 @@ interface CacheEntry {
 }
 
 let cookiesFile: string | null = null;
-const cache = new Map<string, CacheEntry>();
-const MAX_CACHE = 2;
+const MAX_CACHE = 2; // por servidor
 const TTL_MS = 15 * 60 * 1000; // si en 15 min no se usó, descartar (canción muy larga o cola cambiada)
 
 export function initStreamer(cookies: string | null): void {
@@ -122,43 +121,72 @@ export function spawnStream(url: string, title?: string, seekSeconds = 0): PassT
     return buffered;
 }
 
-function evict(url: string, reason: string): void {
-    const entry = cache.get(url);
-    if (!entry) return;
-    cache.delete(url);
+// Precargas por servidor: guildId → (clave → entrada). La clave incluye el seek
+// para que un stream del quiz (desde 0:45) nunca se entregue a un =play normal,
+// y cada servidor tiene su propio límite para no expulsar las precargas de otro.
+const cache = new Map<string, Map<string, CacheEntry>>();
+
+function cacheKey(url: string, seekSeconds: number): string {
+    return `${seekSeconds}|${url}`;
+}
+
+function evict(guildId: string, key: string, reason: string): void {
+    const guildCache = cache.get(guildId);
+    const entry = guildCache?.get(key);
+    if (!guildCache || !entry) return;
+    guildCache.delete(key);
+    if (guildCache.size === 0) cache.delete(guildId);
     clearTimeout(entry.timer);
     entry.stream.destroy(); // el 'close' del stream mata los procesos
     console.log(`[Prefetch] descartado (${reason}): ${entry.title}`);
 }
 
 // Arranca el stream de un track por adelantado para que createStream lo encuentre listo
-export function prefetchTrack(url: string, title = url, seekSeconds = 0): void {
-    if (!url || cache.has(url)) return;
-    while (cache.size >= MAX_CACHE) {
-        const oldest = cache.keys().next().value;
+export function prefetchTrack(guildId: string, url: string, title = url, seekSeconds = 0): void {
+    if (!guildId || !url) return;
+    const key = cacheKey(url, seekSeconds);
+    let guildCache = cache.get(guildId);
+    if (guildCache?.has(key)) return;
+    while (guildCache && guildCache.size >= MAX_CACHE) {
+        const oldest = guildCache.keys().next().value;
         if (oldest === undefined) break;
-        evict(oldest, 'cache llena');
+        evict(guildId, oldest, 'cache llena');
+        guildCache = cache.get(guildId);
     }
     console.log(`[Prefetch] precargando${seekSeconds ? ` (desde ${seekSeconds}s)` : ''}: ${title}`);
     const stream = spawnStream(url, title, seekSeconds);
-    stream.on('error', () => evict(url, 'error'));
-    const timer = setTimeout(() => evict(url, 'expiró'), TTL_MS);
+    // Solo descartar si la entrada sigue siendo ESTE stream (ya pudo entregarse y re-precargarse)
+    stream.on('error', () => {
+        if (cache.get(guildId)?.get(key)?.stream === stream) evict(guildId, key, 'error');
+    });
+    const timer = setTimeout(() => evict(guildId, key, 'expiró'), TTL_MS);
     timer.unref?.();
-    cache.set(url, { stream, title, timer });
+    if (!guildCache) {
+        guildCache = new Map();
+        cache.set(guildId, guildCache);
+    }
+    guildCache.set(key, { stream, title, timer });
 }
 
-// Devuelve el stream precargado si existe (y lo saca de la cache)
-export function takePrefetched(url: string): PassThrough | null {
-    const entry = cache.get(url);
-    if (!entry) return null;
-    cache.delete(url);
+// Devuelve el stream precargado para ese servidor, URL y seek si existe (y lo saca de la cache)
+export function takePrefetched(guildId: string, url: string, seekSeconds = 0): PassThrough | null {
+    const key = cacheKey(url, seekSeconds);
+    const guildCache = cache.get(guildId);
+    const entry = guildCache?.get(key);
+    if (!guildCache || !entry) return null;
+    guildCache.delete(key);
+    if (guildCache.size === 0) cache.delete(guildId);
     clearTimeout(entry.timer);
     if (entry.stream.destroyed) return null;
     console.log(`[Prefetch] HIT: ${entry.title}`);
     return entry.stream;
 }
 
-// Descarta todas las precargas pendientes (fin de cola, fin de quiz)
-export function clearPrefetched(): void {
-    for (const url of [...cache.keys()]) evict(url, 'limpieza');
+// Descarta las precargas pendientes de un servidor (fin de cola, fin de quiz),
+// o de todos si no se indica servidor
+export function clearPrefetched(guildId?: string): void {
+    const guildIds = guildId ? [guildId] : [...cache.keys()];
+    for (const id of guildIds) {
+        for (const key of [...(cache.get(id)?.keys() ?? [])]) evict(id, key, 'limpieza');
+    }
 }

@@ -2,7 +2,6 @@ import { Message } from 'discord.js';
 import { BotClient } from '../types';
 
 module.exports = async (client: BotClient, message: Message) => {
-    console.log(`[MSG] autor=${message.author.tag} guild=${!!message.guild} prefix="${client.prefix}" content="${message.content}" starts=${message.content.startsWith(client.prefix)}`);
     if (message.author.bot || !message.guild) return;
     if (!message.content.startsWith(client.prefix)) return;
 
@@ -11,7 +10,8 @@ module.exports = async (client: BotClient, message: Message) => {
     if (!commandName) return;
 
     const command = client.commands.get(commandName);
-    console.log(`[CMD] comando="${commandName}" encontrado=${!!command}`);
+    // Solo autor y nombre del comando: nunca los argumentos ni el texto de otros mensajes
+    console.log(`[CMD] autor=${message.author.tag} comando="${commandName}" encontrado=${!!command}`);
     if (!command) return;
 
     try {

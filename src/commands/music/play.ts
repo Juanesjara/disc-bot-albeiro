@@ -73,7 +73,7 @@ const command: Command = {
                 trackToPlay = pickBestTrack(results.tracks, query);
             }
 
-            const { track } = await player.play(voiceChannel, trackToPlay, {
+            const { track, searchResult, queue } = await player.play(voiceChannel, trackToPlay, {
                 requestedBy: message.author,
                 nodeOptions: {
                     metadata: { channel: message.channel as TextChannel },
@@ -83,7 +83,11 @@ const command: Command = {
                     leaveOnEmptyCooldown: 10000,
                 },
             });
-            message.channel.send(`:white_check_mark: Añadido a la cola: **${track.title}** de **${track.author}**`);
+            // Si la canción arrancó ya, el embed de playerStart la anuncia; solo avisamos si quedó en cola
+            const queued = queue.tracks.some(t => t.id === track.id);
+            if (queued || searchResult.hasPlaylist()) {
+                message.channel.send(`:white_check_mark: Añadido a la cola: **${track.title}** de **${track.author}**`);
+            }
         } catch (error: any) {
             message.channel.send(`:warning: No pude encontrar esa canción: ${error.message}`);
         }

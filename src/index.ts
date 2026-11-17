@@ -50,11 +50,15 @@ client.prefix = config.prefix;
             return spawnStream(track.url, track.title);
         },
     });
-    // Spotify con credenciales para que el quiz pueda resolver tracks por URL
-    await player.extractors.register(SpotifyExtractor, {
-        clientId: config.spotify.clientId,
-        clientSecret: config.spotify.clientSecret,
-    });
+    // Spotify (opcional): solo para `=play` con URLs de Spotify. El quiz no lo necesita.
+    if (config.spotify) {
+        await player.extractors.register(SpotifyExtractor, {
+            clientId: config.spotify.clientId,
+            clientSecret: config.spotify.clientSecret,
+        });
+    } else {
+        console.warn('[Player] ADVERTENCIA: Sin SPOTIFY_CLIENT_ID/SPOTIFY_CLIENT_SECRET — play con URLs de Spotify desactivado (el quiz funciona igual)');
+    }
     // Archivos adjuntos directos
     await player.extractors.register(AttachmentExtractor, {});
     client.player = player;

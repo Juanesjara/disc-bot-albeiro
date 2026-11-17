@@ -6,8 +6,6 @@ import { Song } from '../types';
 const spotifyInfo = SpotifyUrlInfoModule(fetch);
 
 export class SpotifyService {
-    async authorize(): Promise<void> {}
-
     async getPlaylistSongs(playlistUrl: string): Promise<Song[]> {
         let tracks: any[];
         try {

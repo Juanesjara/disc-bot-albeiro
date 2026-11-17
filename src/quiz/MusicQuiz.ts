@@ -40,7 +40,7 @@ export class MusicQuiz {
     // true durante la pausa entre canciones: se ignoran respuestas y votos de skip
     private transitioning = false;
 
-    constructor(message: Message, songCount: number, mode: 'artist' | 'title' | 'both') {
+    constructor(message: Message, mode: 'artist' | 'title' | 'both') {
         this.textChannel = message.channel as TextChannel;
         this.voiceChannel = (message.member as GuildMember).voice.channel as VoiceChannel;
         this.guildId = message.guild!.id;

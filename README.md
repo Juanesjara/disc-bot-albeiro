@@ -69,7 +69,6 @@ SPOTIFY_CLIENT_SECRET=tu_client_secret_de_spotify
 
 # Opcionales
 PREFIX==
-DISCORD_OWNER_ID=tu_id_de_discord
 
 # Para autenticación de YouTube en servidores cloud (cookies en base64)
 YOUTUBE_COOKIES_B64=

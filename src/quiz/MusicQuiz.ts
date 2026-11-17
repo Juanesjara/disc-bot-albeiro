@@ -45,7 +45,7 @@ export class MusicQuiz {
     // Listener de playerError de este quiz (se quita en cleanup)
     private playerErrorListener: ((queue: GuildQueue, error: Error, track: Track) => void) | null = null;
 
-    constructor(message: Message, songCount: number, mode: 'artist' | 'title' | 'both') {
+    constructor(message: Message, mode: 'artist' | 'title' | 'both') {
         this.textChannel = message.channel as TextChannel;
         this.voiceChannel = (message.member as GuildMember).voice.channel as VoiceChannel;
         this.guildId = message.guild!.id;

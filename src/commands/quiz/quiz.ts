@@ -41,7 +41,7 @@ const command: Command = {
 
         activeQuizzes.add(message.guild!.id);
 
-        const quiz = new MusicQuiz(message, songCount, mode);
+        const quiz = new MusicQuiz(message, mode);
         try {
             await quiz.start(playlistUrl, songCount);
         } finally {

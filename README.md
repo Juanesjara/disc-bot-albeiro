@@ -43,6 +43,18 @@ El prefijo por defecto es `=`. Todos los comandos se usan en el chat de texto.
 - `canciones`: entre 1 y 30
 - Modo: `artist` (adivina el artista), `title` (adivina el título), `both` (ambos, por defecto)
 
+### Hablarle en lenguaje natural
+
+También puedes mencionar al bot y pedirle las cosas con tus palabras:
+
+- `@bot pon Tusa de Karol G`
+- `@bot salta esta`
+- `@bot qué está sonando`
+- `@bot para la música`
+- `@bot haz un quiz de 10 canciones con esta playlist <url de Spotify>`
+
+Ejecuta los mismos comandos de arriba, con las mismas respuestas. Las frases comunes se entienden con reglas, gratis y al instante; solo las que no encajan se mandan a la IA (DeepSeek), y solo si configuraste `DEEPSEEK_API_KEY`. Durante un quiz no toca la música ni revela la canción: usa `=stop` o `=vskip`.
+
 ### Info
 
 | Comando | Alias | Descripción |
@@ -72,6 +84,10 @@ PREFIX==
 # Sin ellas el bot arranca igual y el quiz funciona (lee las playlists sin credenciales).
 SPOTIFY_CLIENT_ID=tu_client_id_de_spotify
 SPOTIFY_CLIENT_SECRET=tu_client_secret_de_spotify
+
+# Opcional: IA (DeepSeek) para las frases que las reglas no entienden al mencionar al bot.
+# Sin ella las menciones entienden las frases comunes y los comandos con prefijo funcionan igual.
+DEEPSEEK_API_KEY=
 
 # Para autenticación de YouTube en servidores cloud (cookies en base64)
 YOUTUBE_COOKIES_B64=

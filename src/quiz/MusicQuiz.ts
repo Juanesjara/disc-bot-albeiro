@@ -83,7 +83,8 @@ export class MusicQuiz {
         quizGuilds.add(this.guildId);
 
         this.collector = this.textChannel.createMessageCollector({
-            filter: (m) => !m.author.bot,
+            // Las menciones al bot no son respuestas del quiz (las responde el asistente con un aviso)
+            filter: (m) => !m.author.bot && !new RegExp(`<@!?${m.client.user!.id}>`).test(m.content),
         });
         this.collector.on('collect', (m) => this.handleMessage(m));
 

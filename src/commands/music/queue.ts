@@ -1,6 +1,7 @@
 import { Message, EmbedBuilder } from 'discord.js';
 import { useQueue } from 'discord-player';
 import { BotClient, Command } from '../../types';
+import { rejectIfQuizActive } from '../../quiz/MusicQuiz';
 
 const command: Command = {
     name: 'queue',
@@ -9,6 +10,7 @@ const command: Command = {
     usage: 'queue [página]',
     category: 'Music',
     execute(client: BotClient, message: Message, args: string[]) {
+        if (rejectIfQuizActive(message)) return;
         const queue = useQueue(message.guild!.id);
         if (!queue?.isPlaying()) {
             return message.channel.send(':warning: No hay música reproduciéndose.');

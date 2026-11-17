@@ -188,7 +188,7 @@ El `Procfile` ya define el proceso como worker (`node dist/index.js`). Configura
 
 ### CI
 
-GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) instala dependencias y compila en cada push o PR a `master`/`main`.
+GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) instala dependencias, compila y corre los tests en cada push o PR a `master`/`main`.
 
 ## Estructura
 

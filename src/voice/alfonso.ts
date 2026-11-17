@@ -158,6 +158,11 @@ async function onMention(message: Message): Promise<void> {
         sessions.set(guildId, session);
         watchConnection(session);
         listen(session);
+        // Si quien lo llamó se fue mientras se conectaba, nadie va a salir del canal para avisarlo
+        if (!voiceChannel.members.some(m => !m.user.bot)) {
+            leave(guildId, 'empty');
+            return;
+        }
         console.log(`[Alfonso] entré a ${voiceChannel.name} (servidor=${message.guild.name})`);
 
         session.entryMessage = await (message.channel as any).send({
@@ -235,7 +240,12 @@ function onVoiceStateUpdate(oldState: VoiceState, newState: VoiceState): void {
     const session = sessions.get(newState.guild.id);
     if (!session) return;
     const userId = newState.id;
-    if (userId === alfonsoClient?.user?.id) return; // su propia desconexión la maneja watchConnection
+    if (userId === alfonsoClient?.user?.id) {
+        // Su desconexión la maneja watchConnection. Si un moderador lo mueve a otro canal,
+        // la sesión (quién aceptó, canal a vigilar) ya no vale: sale y hay que volver a mencionarlo
+        if (newState.channelId && newState.channelId !== session.channelId) leave(session.guildId, 'disconnected');
+        return;
+    }
 
     if (oldState.channelId === session.channelId && newState.channelId !== session.channelId) {
         if (onVoiceLeave(session, userId, newState.channelId)) refreshEntry(session);
@@ -270,12 +280,18 @@ function listen(session: Session): void {
         const chunks: Buffer[] = [];
         let bytes = 0;
         let byLimit = false;
+        let ended = false;
         let done = false;
 
         const finish = () => {
             if (done) return;
             done = true;
             session.receiving.delete(userId);
+            // Sin 'end' (tope de 15 s o error) pipe no cierra el decodificador, y opusscript no lo libera solo
+            if (!ended) {
+                opus.unpipe(decoder);
+                decoder.destroy();
+            }
             const endedAt = byLimit ? Date.now() : Date.now() - SILENCE_MS;
             onPhrase(session, userId, Buffer.concat(chunks), endedAt);
         };
@@ -292,7 +308,7 @@ function listen(session: Session): void {
         });
         decoder.on('error', (err: any) => console.error('[Voz] Error decodificando audio:', err?.message ?? err));
         opus.on('error', (err: any) => console.error('[Voz] Error recibiendo audio:', err?.message ?? err));
-        opus.once('end', finish);
+        opus.once('end', () => { ended = true; finish(); });
         opus.once('close', finish);
         opus.pipe(decoder);
     });
@@ -319,7 +335,8 @@ function onPhrase(session: Session, userId: string, pcm: Buffer, endedAt: number
 }
 
 async function handleTranscript(session: Session, userId: string, result: { text?: string; prompt?: string; err?: any }, endedAt: number): Promise<void> {
-    if (sessions.get(session.guildId) !== session) return;
+    // "Ya no" o salir del canal mientras se transcribía: la orden ya no se ejecuta
+    if (!canProcess(session, userId)) return;
 
     if (result.err) {
         session.failures++;

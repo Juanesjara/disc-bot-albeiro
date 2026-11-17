@@ -11,7 +11,7 @@ npm start       # node dist/index.js
 npm run dev     # nodemon: recompila y reinicia al cambiar src/**/*.ts
 ```
 
-- Verifica cambios con `npm run build && npm test`. No hay linter. CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) solo hace `npm ci && npm run build`: **no corre los tests**.
+- Verifica cambios con `npm run build && npm test`. No hay linter. CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) hace `npm ci && npm test` (compila y corre los tests) en cada push o PR.
 - Tests con `node:test` + `node:assert/strict`, en `*.test.ts` junto al código (p. ej. [src/quiz/answers.test.ts](src/quiz/answers.test.ts), [src/ai/intents.test.ts](src/ai/intents.test.ts)). Solo cubren lógica pura (comparar respuestas, reglas de intents). **No pongas tests dentro de `commands/`, `events/` ni `player/`**: el loader cargaría el `.test.js` como si fuera un comando o evento.
 - SonarCloud ([.sonarcloud.properties](.sonarcloud.properties)) trata `*.test.ts` como pruebas.
 - `tsconfig` con `strict: false` y `noImplicitAny: false`; abunda `any`, no hace falta tiparlo todo.

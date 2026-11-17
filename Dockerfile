@@ -16,14 +16,17 @@ RUN apt-get update && \
 # --- Dependencias de producción (las que se copian a la imagen final) ---
 FROM toolchain AS deps
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# Sin scripts de instalación salvo los dos que descargan binarios necesarios (ffmpeg y yt-dlp)
+RUN npm ci --omit=dev --ignore-scripts && \
+    npm rebuild ffmpeg-static youtube-dl-exec
 # Actualizar yt-dlp a la última versión (YouTube rompe versiones viejas seguido)
 RUN ./node_modules/youtube-dl-exec/bin/yt-dlp -U || true
 
 # --- Compilación de TypeScript (con devDependencies) ---
 FROM toolchain AS build
 COPY package.json package-lock.json ./
-RUN npm ci
+# Para compilar con tsc no hace falta ningún script de instalación
+RUN npm ci --ignore-scripts
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build

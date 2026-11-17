@@ -65,7 +65,10 @@ const command: Command = {
                 trackToPlay = pickBestTrack(results.tracks, query);
             }
 
-            const { track } = await player.play(voiceChannel, trackToPlay, {
+            // Si no suena nada, el embed de playerStart ya anuncia la canción
+            const wasPlaying = !!player.nodes.get(message.guild!.id)?.currentTrack;
+
+            const { track, searchResult } = await player.play(voiceChannel, trackToPlay, {
                 requestedBy: message.author,
                 nodeOptions: {
                     metadata: { channel: message.channel as TextChannel },
@@ -75,7 +78,9 @@ const command: Command = {
                     leaveOnEmptyCooldown: 10000,
                 },
             });
-            message.channel.send(`:white_check_mark: Añadido a la cola: **${track.title}** de **${track.author}**`);
+            if (wasPlaying || searchResult.hasPlaylist()) {
+                message.channel.send(`:white_check_mark: Añadido a la cola: **${track.title}** de **${track.author}**`);
+            }
         } catch (error: any) {
             message.channel.send(`:warning: No pude encontrar esa canción: ${error.message}`);
         }

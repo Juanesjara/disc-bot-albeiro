@@ -356,10 +356,7 @@ async function handleTranscript(session: Session, userId: string, result: { text
 
 /** Conecta a Alfonso si hay ALFONSO_TOKEN. Un fallo aquí no debe tumbar el bot de música. */
 export async function initAlfonso(main: BotClient): Promise<void> {
-    if (!config.alfonso) {
-        console.warn('[Alfonso] Sin ALFONSO_TOKEN — órdenes por voz desactivadas');
-        return;
-    }
+    if (!config.alfonso) return;
     mainClient = main;
     quota = new DailyQuota(config.alfonso.topeUsuarioMin * 60_000, config.alfonso.topeGlobalMin * 60_000);
     // Aprender de lo que suena (no durante el quiz: esas canciones no son pedidos de nadie)

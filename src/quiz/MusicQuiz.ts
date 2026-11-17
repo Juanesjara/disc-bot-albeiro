@@ -11,6 +11,7 @@ import { SpotifyService } from '../services/spotify';
 import { Song } from '../types';
 import { config } from '../config/config';
 import { prefetchTrack, clearPrefetched } from '../streamer';
+import { matchesAnswer, isBlankAnswer, buildScoreboard } from './answers';
 
 const STOP_CMD = `${config.prefix}stop`;
 const SKIP_CMD = `${config.prefix}vskip`;
@@ -88,11 +89,21 @@ export class MusicQuiz {
     private async playSong(): Promise<void> {
         if (this.stopped) return;
 
-        this.titleGuessed = this.guessMode === 'title';
-        this.artistGuessed = this.guessMode === 'artist';
+        const song = this.songs[this.currentIndex];
+        // Lo que no se pide en este modo, o queda vacío tras limpiar (p. ej. "(Intro)"),
+        // se da por adivinado: nadie puede acertarlo y la ronda puede cerrarse con lo demás
+        this.titleGuessed = this.guessMode === 'artist' || isBlankAnswer(song.title);
+        this.artistGuessed = this.guessMode === 'title' || isBlankAnswer(song.artist);
+        if (isBlankAnswer(song.title) || isBlankAnswer(song.artist)) {
+            console.log(`[Quiz] Respuesta vacía tras normalizar (título: "${song.title}", artista: "${song.artist}"), se da por adivinada`);
+        }
         this.skippers.clear();
 
-        const song = this.songs[this.currentIndex];
+        // Si en este modo no queda nada que adivinar, no tiene sentido esperar 60 s
+        if (this.titleGuessed && this.artistGuessed) {
+            return this.nextSong('No hay nada que adivinar en esta canción, pasando a la siguiente.');
+        }
+
         await this.textChannel.send(`:musical_note: Canción **${this.currentIndex + 1}/${this.songs.length}** — ¡Adivina!`);
 
         const player = useMainPlayer();
@@ -185,32 +196,28 @@ export class MusicQuiz {
         // Durante la pausa entre canciones ya se mostró la respuesta: no contar nada
         if (this.transitioning) return;
 
+        // Solo juega quien está en el canal de voz del quiz: el resto ni vota ni puntúa ni recibe reacción
+        if (!this.isInVoiceChannel(message.author.id)) return;
+
         if (content === SKIP_CMD) {
             this.handleSkip(message.author.id);
             return;
         }
 
+        // Otros comandos (=play, =queue...) no son respuestas: ni suman ni reciben ❌
+        if (content.startsWith(config.prefix.toLowerCase())) return;
+
         const song = this.songs[this.currentIndex];
         let gained = 0;
         let correct = false;
 
-        const normalize = (s: string) => s
-            .toLowerCase()
-            .normalize('NFD').replace(/[̀-ͯ]/g, '') // é→e, á→a, ñ→n, ü→u...
-            .replace(/["'`´‘’“”«»]/g, '') // comillas y apóstrofes: Héctor "El Father" → hector el father
-            .replace(/&/g, 'y')       // & → y
-            .replace(/\s+/g, ' ').trim();
-        const normalizedContent = normalize(content);
-        const normalizedTitle = normalize(song.title);
-        const normalizedArtist = normalize(song.artist);
-
-        if (!this.titleGuessed && normalizedContent.includes(normalizedTitle)) {
+        if (!this.titleGuessed && matchesAnswer(content, song.title)) {
             this.titleGuessed = true;
             gained += 2;
             correct = true;
         }
 
-        if (!this.artistGuessed && normalizedContent.includes(normalizedArtist)) {
+        if (!this.artistGuessed && matchesAnswer(content, song.artist)) {
             this.artistGuessed = true;
             gained += 3;
             correct = true;
@@ -231,17 +238,23 @@ export class MusicQuiz {
         }
     }
 
+    private isInVoiceChannel(userId: string): boolean {
+        return this.voiceChannel.members.has(userId);
+    }
+
     private handleSkip(userId: string): void {
         this.skippers.add(userId);
         const nonBotMembers = this.voiceChannel.members.filter((m) => !m.user.bot);
         const needed = nonBotMembers.size;
+        // Solo cuentan los votos de quienes siguen en el canal de voz
+        const votes = [...this.skippers].filter((id) => nonBotMembers.has(id)).length;
 
-        if (this.skippers.size >= needed) {
+        if (votes >= needed) {
             this.nextSong('Canción saltada por votación.');
             return;
         }
 
-        this.textChannel.send(`⏭ Votos para saltar: **(${this.skippers.size}/${needed})**`);
+        this.textChannel.send(`⏭ Votos para saltar: **(${votes}/${needed})**`);
     }
 
     private nextSong(reason: string): void {
@@ -278,10 +291,9 @@ export class MusicQuiz {
 
     private getScores(): string {
         const medals = [':first_place:', ':second_place:', ':third_place:'];
-        return this.voiceChannel.members
-            .filter((m) => !m.user.bot)
-            .map((m) => ({ id: m.id, score: this.scores[m.id] || 0 }))
-            .sort((a, b) => b.score - a.score)
+        // Quienes están en el canal de voz + quienes puntuaron aunque ya se hayan ido
+        const memberIds = this.voiceChannel.members.filter((m) => !m.user.bot).map((m) => m.id);
+        return buildScoreboard(memberIds, this.scores)
             .map((entry, i) => `${medals[i] ?? `**${i + 1}.**`} <@${entry.id}> — **${entry.score} puntos**`)
             .join('\n');
     }

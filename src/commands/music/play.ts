@@ -73,6 +73,9 @@ const command: Command = {
                 trackToPlay = pickBestTrack(results.tracks, query);
             }
 
+            // Pudo arrancar un quiz mientras se buscaba la canción
+            if (rejectIfQuizActive(message)) return;
+
             const { track, searchResult, queue } = await player.play(voiceChannel, trackToPlay, {
                 requestedBy: message.author,
                 nodeOptions: {

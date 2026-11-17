@@ -36,6 +36,8 @@ const FIXED: Array<[RegExp, string, string[]]> = [
     [/^repite (esta|esa|la cancion|esta cancion)$/, 'loop', ['track']],
     [/^repite (la cola|todo)$/, 'loop', ['queue']],
     [/^(no repitas|deja de repetir|sin repetir|quita el (loop|repetir))$/, 'loop', ['off']],
+    // "pasame la letra", "la letra de la cancion", "cual es la letra de esta" (también sin el "de")
+    [/^(((pasame|pasa|dame|muestra|muestrame|ensename|manda|mandame|cual es|quiero|tienes|ver) )?(la )?letra|lyrics)( (de )?(la cancion|esta cancion|esa cancion|esta|esa|la))?$/, 'lyrics', []],
 ];
 
 /**

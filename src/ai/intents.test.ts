@@ -35,6 +35,14 @@ test('controles de reproducción', () => {
     assert.deepEqual(parseIntent('deja de repetir'), cmd('loop', 'off'));
 });
 
+test('letra de la canción que suena', () => {
+    assert.deepEqual(parseIntent('pasame la letra la cancion'), cmd('lyrics'));
+    assert.deepEqual(parseIntent('pásame la letra de la canción'), cmd('lyrics'));
+    assert.deepEqual(parseIntent('la letra de la canción'), cmd('lyrics'));
+    assert.deepEqual(parseIntent('¿cuál es la letra de esta?'), cmd('lyrics'));
+    assert.deepEqual(parseIntent('letra'), cmd('lyrics'));
+});
+
 test('volumen y quitar de la cola necesitan número', () => {
     assert.deepEqual(parseIntent('volumen 30'), cmd('volume', '30'));
     assert.deepEqual(parseIntent('baja el volumen a 20%'), cmd('volume', '20'));

@@ -144,5 +144,10 @@ client.prefix = config.prefix;
         if (guildId) clearPrefetched(guildId);
     });
 
-    client.login(config.token);
-})();
+    await client.login(config.token);
+})().catch((err) => {
+    // Un fallo al arrancar (token inválido, extractor que no carga) sí debe tumbar el proceso
+    // para que Railway lo reinicie, en vez de quedar vivo sin conectarse
+    console.error('[Proceso] Error fatal en el arranque:', err?.stack ?? err);
+    process.exit(1);
+});

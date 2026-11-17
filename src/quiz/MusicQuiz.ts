@@ -84,7 +84,8 @@ export class MusicQuiz {
         this.playerErrorListener = (queue, error, track) => {
             if (queue?.guild?.id !== this.guildId) return;
             if (this.stopped || this.transitioning) return;
-            if (track?.url && this.currentUrl && track.url !== this.currentUrl) return;
+            // Sin canción en curso (buscando la siguiente) ningún error puede ser de esta ronda
+            if (!this.currentUrl || track?.url !== this.currentUrl) return;
             console.error('[Quiz] Falló el audio de la canción, pasando a la siguiente:', error?.message ?? error);
             this.nextSong('Error al reproducir, pasando a la siguiente.');
         };
@@ -113,7 +114,8 @@ export class MusicQuiz {
 
         try {
             const result = await player.search(query);
-
+            // =stop durante la búsqueda: no volver a entrar al canal ni revelar la canción
+            if (this.stopped) return;
 
             if (!result.hasTracks()) {
                 return this.nextSong('No encontré esta canción en YouTube, pasando a la siguiente.');

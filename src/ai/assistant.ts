@@ -69,7 +69,7 @@ const TOOLS: ToolDef[] = [
         toArgs: (i) => (i.page ? [String(i.page)] : []),
     },
     simple('nowplaying', 'Muestra qué canción está sonando.'),
-    simple('lyrics', 'Publica la letra de la canción que está sonando.'),
+    simple('lyrics', 'Publica la letra de la canción que está sonando ahora. Solo sirve para esa: si piden la letra de otra canción, no la llames y di que solo puedes dar la de la canción actual.'),
     {
         name: 'volume',
         description: 'Cambia el volumen.',

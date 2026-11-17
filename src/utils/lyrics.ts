@@ -9,14 +9,20 @@ export const DISCORD_MAX = 2000;
  * "Karol G - TUSA (Official Video)" → { artist: 'Karol G', title: 'TUSA' }
  * "DUKI - Malbec x Bizarrap"        → { artist: 'DUKI', title: 'Malbec' }
  * Sin separador, el artista es el canal (`author`) sin " - Topic" / "VEVO".
+ *
+ * Con `titleIsClean` (tracks de Spotify) o canales "- Topic", el título ya es solo la canción
+ * y el artista viene en `author`: no se parte por " - " ("Bohemian Rhapsody - Remastered 2011").
  */
-export function parseTrackTitle(rawTitle: string, author = ''): { artist: string; title: string } {
+export function parseTrackTitle(rawTitle: string, author = '', titleIsClean = false): { artist: string; title: string } {
     let text = (rawTitle ?? '')
         .replace(/[([{【][^)\]}】]*[)\]}】]/g, ' ') // (Official Video), [Lyrics], {HD}...
-        .replace(/#/g, ' ');                        // "Sessions #52" → "Sessions 52"
+        .replace(/#/g, ' ')                         // "Sessions #52" → "Sessions 52"
+        // Sufijos de versión: "- Remastered 2011", "- Live", "- Radio Edit", "- From "Encanto""
+        .replace(/\s+[-–—]\s+(?:\d{4}\s+)?(?:remaster(?:ed)?|live|en vivo|radio edit|edit|from|version|versi[oó]n|acoustic|ac[uú]stic[oa]|mono|stereo|single)(?![a-z]).*$/i, '');
 
     let artist = '';
-    const sep = text.match(/\s+(?:-|–|—|\|\|?)\s+/);
+    const fromTopic = /\s*-\s*topic$/i.test(author ?? '');
+    const sep = titleIsClean || fromTopic ? null : text.match(/\s+(?:-|–|—|\|\|?)\s+/);
     if (sep) {
         artist = text.slice(0, sep.index).trim();
         text = text.slice(sep.index! + sep[0].length);
@@ -25,8 +31,9 @@ export function parseTrackTitle(rawTitle: string, author = ''): { artist: string
     }
 
     const title = text
-        // Colaboraciones al final del título: "ft. X", "feat X", "x Bizarrap", "con X"
-        .replace(/\s+(?:ft\.?|feat\.?|featuring|x|con|w\/)\s+.*$/i, '')
+        // Colaboraciones al final del título: "ft. X", "feat X", "x Bizarrap".
+        // "con" no: es muy común dentro de títulos en español ("Café con Ron")
+        .replace(/\s+(?:ft\.?|feat\.?|featuring|x|w\/)\s+.*$/i, '')
         // Etiquetas sueltas sin paréntesis: "Official Video", "Video Oficial", "Lyrics"...
         .replace(/\s+(?:official\s+(?:music\s+)?(?:video|audio)|video\s+oficial|audio\s+oficial|lyrics?|letra|visualizer)\s*$/i, '')
         .replace(/\s+/g, ' ')

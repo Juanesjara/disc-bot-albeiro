@@ -26,6 +26,23 @@ test('sin separador: el artista es el canal sin " - Topic"', () => {
     assert.deepEqual(parseTrackTitle('Hello (Official Music Video)', 'AdeleVEVO'), { artist: 'Adele', title: 'Hello' });
 });
 
+test('"con" dentro del título no se toma como colaboración', () => {
+    assert.deepEqual(parseTrackTitle('Bad Bunny - CAFé CON RON (Visualizer)'), { artist: 'Bad Bunny', title: 'CAFé CON RON' });
+});
+
+test('tracks de Spotify y canales "- Topic": artista del canal y sin sufijo de versión', () => {
+    assert.deepEqual(parseTrackTitle('Bohemian Rhapsody - Remastered 2011', 'Queen', true), { artist: 'Queen', title: 'Bohemian Rhapsody' });
+    assert.deepEqual(
+        parseTrackTitle('Here Comes The Sun - Remastered 2019', 'The Beatles - Topic'),
+        { artist: 'The Beatles', title: 'Here Comes The Sun' },
+    );
+    assert.deepEqual(parseTrackTitle('Dos Oruguitas - From "Encanto"', 'Sebastián Yatra', true), { artist: 'Sebastián Yatra', title: 'Dos Oruguitas' });
+});
+
+test('título que queda vacío tras limpiar', () => {
+    assert.deepEqual(parseTrackTitle('Artist - [Official Video]', 'X'), { artist: 'Artist', title: '' });
+});
+
 test('una letra corta queda en un solo mensaje', () => {
     assert.deepEqual(splitLyrics('linea 1\nlinea 2'), ['linea 1\nlinea 2']);
 });

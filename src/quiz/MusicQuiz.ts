@@ -23,6 +23,13 @@ const SONG_GAP_MS = 1500;
 // Exportado para que los eventos del player puedan saber si hay un quiz activo
 export const quizGuilds = new Set<string>();
 
+// Para comandos de música: si hay quiz en el servidor, avisa y devuelve true (el comando no debe ejecutarse)
+export function rejectIfQuizActive(message: Message): boolean {
+    if (!quizGuilds.has(message.guild!.id)) return false;
+    message.channel.send(':warning: Hay un quiz activo, este comando no está disponible hasta que termine.');
+    return true;
+}
+
 export class MusicQuiz {
     private textChannel: TextChannel;
     private voiceChannel: VoiceChannel;

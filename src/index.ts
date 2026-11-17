@@ -8,6 +8,7 @@ import fs from 'fs';
 import { config } from './config/config';
 import { BotClient, Command } from './types';
 import { quizGuilds, QUIZ_SEEK_SECONDS } from './quiz/MusicQuiz';
+import { initAlfonso } from './voice/alfonso';
 
 // Un error puntual (mensaje que no se pudo enviar, stream roto...) no debe tumbar el bot:
 // en Node 22 un rechazo sin capturar mata el proceso. Se registra y se sigue.
@@ -149,6 +150,11 @@ client.prefix = config.prefix;
     });
 
     await client.login(config.token);
+
+    // Alfonso (opcional) escucha la voz y le pasa las órdenes a este bot. Si falla, la música sigue.
+    initAlfonso(client).catch((err) => {
+        console.error('[Alfonso] No se pudo conectar; órdenes por voz desactivadas:', err?.message ?? err);
+    });
 })().catch((err) => {
     // Un fallo al arrancar (token inválido, extractor que no carga) sí debe tumbar el proceso
     // para que Railway lo reinicie, en vez de quedar vivo sin conectarse

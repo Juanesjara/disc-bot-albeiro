@@ -24,6 +24,16 @@ export function normalizePhrase(s: string): string {
 // Varias acciones en una frase ("pon X y baja el volumen"): mejor que la resuelva la IA
 const COMPOUND = /\s(y|luego|despues)\s+(pon|ponme|sube|baja|salta|pausa|para|quita|mezcla|repite|limpia|volumen|vol)\b/;
 
+/**
+ * Varias acciones separadas por coma ("pon Goteo de Duki, quita esta"). Hablando es lo normal;
+ * las reglas lo tomarían como una sola búsqueda, así que la orden por voz se manda a la IA.
+ * No se usa en la mención por texto, que queda igual.
+ */
+export function hasCommaCompound(text: string): boolean {
+    const t = (text ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return /[,;]\s*(y\s+)?(pon|ponme|pone|sube|baja|salta(la)?|pausa|para(la)?|quita(la)?|mezcla|repite|limpia|volumen|vol|sigue|deten)\b/.test(t);
+}
+
 const FIXED: Array<[RegExp, string, string[]]> = [
     [/^(salta(la|te|lo)?|skip|siguiente|pasa(la)?|cambia(la)?|next)( (esta|esa|la|la cancion|esta cancion|esa cancion))?$/, 'skip', []],
     [/^(para|parala|deten|detente|detenla|stop|apaga)( (la musica|todo|eso|la cancion))?$/, 'stop', []],

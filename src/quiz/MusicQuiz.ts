@@ -92,6 +92,11 @@ export class MusicQuiz {
         }
         this.skippers.clear();
 
+        // Si en este modo no queda nada que adivinar, no tiene sentido esperar 60 s
+        if (this.titleGuessed && this.artistGuessed) {
+            return this.nextSong('No hay nada que adivinar en esta canción, pasando a la siguiente.');
+        }
+
         await this.textChannel.send(`:musical_note: Canción **${this.currentIndex + 1}/${this.songs.length}** — ¡Adivina!`);
 
         const player = useMainPlayer();

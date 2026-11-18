@@ -1,9 +1,14 @@
-import { Message, TextChannel } from 'discord.js';
+import {
+    ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, EmbedBuilder, Message, TextChannel,
+} from 'discord.js';
 import { useQueue } from 'discord-player';
 import { BotClient, Command } from '../../types';
 import { rejectIfQuizActive } from '../../quiz/MusicQuiz';
 import { logSendError } from '../../utils/safeSend';
-import { parseTrackTitle, splitLyrics } from '../../utils/lyrics';
+import { parseTrackTitle, splitLyrics, LYRICS_PAGE_CHARS } from '../../utils/lyrics';
+
+// Tiempo durante el que se puede pasar de página; luego los botones se desactivan
+const PAGES_TIMEOUT_MS = 10 * 60_000;
 
 // lrclib.net: base pública de letras, gratis y sin clave.
 // Se llama con fetch y un solo intento por búsqueda: el cliente de discord-player reintenta sin tope
@@ -81,11 +86,40 @@ const command: Command = {
                 .catch(logSendError);
         }
 
-        // La letra es texto de terceros: que nunca notifique a nadie
-        const chunks = splitLyrics(`:page_facing_up: **${title}** — ${artist}\n\n${lyrics}`);
-        for (const chunk of chunks) {
-            await message.channel.send({ content: chunk, allowedMentions: { parse: [] } }).catch(logSendError);
-        }
+        // Un recuadro con la letra por páginas y botones ◀ ▶ (los embeds nunca notifican a nadie)
+        const pages = splitLyrics(lyrics, LYRICS_PAGE_CHARS);
+        const embedFor = (page: number) => new EmbedBuilder()
+            .setColor(0x1DB954)
+            .setTitle(`📄 ${title || track.title}`.slice(0, 256))
+            .setDescription(pages[page])
+            .setThumbnail(track.thumbnail || null)
+            .setFooter({ text: `${artist}${pages.length > 1 ? ` · Página ${page + 1}/${pages.length}` : ''}`.slice(0, 2048) });
+        const buttonsFor = (page: number, disabled = false) => [
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder().setCustomId('lyrics:prev').setEmoji('◀️').setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled || page === 0),
+                new ButtonBuilder().setCustomId('lyrics:next').setEmoji('▶️').setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled || page === pages.length - 1),
+            ),
+        ];
+
+        const sent = await message.channel
+            .send({ embeds: [embedFor(0)], components: pages.length > 1 ? buttonsFor(0) : [], allowedMentions: { parse: [] } })
+            .catch(logSendError);
+        if (!sent || pages.length <= 1) return;
+
+        // Cualquiera del canal puede pasar de página; el collector solo escucha los botones de este mensaje
+        let page = 0;
+        const collector = sent.createMessageComponentCollector({ componentType: ComponentType.Button, time: PAGES_TIMEOUT_MS });
+        collector.on('collect', (interaction) => {
+            page = interaction.customId === 'lyrics:next'
+                ? Math.min(page + 1, pages.length - 1)
+                : Math.max(page - 1, 0);
+            interaction.update({ embeds: [embedFor(page)], components: buttonsFor(page) }).catch(logSendError);
+        });
+        collector.on('end', () => {
+            sent.edit({ components: buttonsFor(page, true) }).catch(logSendError);
+        });
     },
 };
 

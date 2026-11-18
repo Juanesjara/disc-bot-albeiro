@@ -7,6 +7,8 @@ export const BASE_VOCABULARY = [
     'Karol G', 'Duki', 'Feid', 'Bad Bunny', 'Blessd', 'Ryan Castro', 'J Balvin', 'Maluma', 'Myke Towers',
     'Peso Pluma', 'Quevedo', 'Bizarrap', 'Rauw Alejandro', 'Ozuna', 'Mora', 'Young Miko', 'Anuel AA',
     'Farruko', 'Sech', 'Daddy Yankee', 'Shakira', 'Kapo', 'Beéle', 'Emilia', 'Tiago PZK',
+    // Atajos del servidor (src/voice/shortcuts.ts)
+    'Yoryi', 'Luigi 21 Plus', 'Daga Adicta',
 ];
 
 // Whisper solo mira ~224 tokens del prompt: un tope en caracteres deja margen

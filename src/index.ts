@@ -130,13 +130,18 @@ client.prefix = config.prefix;
     }
 
     // Precargar la siguiente canción de la cola mientras suena la actual
-    // (las del quiz se precargan desde MusicQuiz con su propio seek)
-    player.events.on('playerStart', (queue: any) => {
+    // (las del quiz se precargan desde MusicQuiz con su propio seek).
+    // También al añadir canciones: si la cola estaba vacía en playerStart, la que se
+    // añade después con =play no se precargaba y arrancaba en frío (silencio largo).
+    const prefetchNext = (queue: any) => {
         const guildId = queue?.guild?.id;
-        if (!guildId || quizGuilds.has(guildId)) return;
+        if (!guildId || quizGuilds.has(guildId) || !queue.currentTrack) return;
         const next = queue?.tracks?.at?.(0) ?? queue?.tracks?.data?.[0];
         if (next?.url && next.source === 'youtube') prefetchTrack(guildId, next.url, next.title);
-    });
+    };
+    player.events.on('playerStart', prefetchNext);
+    player.events.on('audioTrackAdd', prefetchNext);
+    player.events.on('audioTracksAdd', prefetchNext);
     // Limpiar solo las precargas de ESE servidor. Durante el quiz, la cola se queda
     // vacía entre canciones: no tocar sus precargas (MusicQuiz.cleanup las limpia).
     player.events.on('emptyQueue', (queue: any) => {

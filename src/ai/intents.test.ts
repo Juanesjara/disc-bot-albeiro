@@ -2,7 +2,7 @@
 // Viven en src/ai/ (no en commands/events/player) para que el loader del bot no las cargue.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseIntent } from './intents';
+import { hasCommaCompound, parseIntent } from './intents';
 
 const cmd = (command: string, ...args: string[]) => ({ command, args });
 const URL = 'https://open.spotify.com/playlist/37i9dQZEVXbMDoHDwVN2tF?si=abc123';
@@ -66,4 +66,11 @@ test('frases compuestas o desconocidas van a la IA', () => {
 
 test('una canción con "y" en el nombre sigue siendo play', () => {
     assert.deepEqual(parseIntent('pon Rosa y Azul'), cmd('play', 'Rosa', 'y', 'Azul'));
+});
+
+test('hasCommaCompound: varias acciones separadas por coma (órdenes por voz)', () => {
+    assert.equal(hasCommaCompound('pone goteo de Duki, quita esta'), true);
+    assert.equal(hasCommaCompound('salta esta, y sube el volumen'), true);
+    assert.equal(hasCommaCompound('pon Tusa de Karol G'), false);
+    assert.equal(hasCommaCompound('pon Pepas, de Farruko'), false);
 });

@@ -149,6 +149,22 @@ client.prefix = config.prefix;
     });
 
     await client.login(config.token);
+
+    // Alfonso (opcional) escucha la voz y le pasa las órdenes a este bot. Si falla, la música sigue.
+    // Se carga aquí y no con import: su librería de voz trae un binario nativo (DAVE) y, si faltara
+    // en el servidor, un import arriba tumbaría también al bot de música al arrancar.
+    if (config.alfonso) {
+        try {
+            const { initAlfonso } = require('./voice/alfonso');
+            initAlfonso(client).catch((err: any) => {
+                console.error('[Alfonso] No se pudo conectar; órdenes por voz desactivadas:', err?.message ?? err);
+            });
+        } catch (err: any) {
+            console.error('[Alfonso] No se pudo cargar; órdenes por voz desactivadas:', err?.message ?? err);
+        }
+    } else {
+        console.warn('[Alfonso] Sin ALFONSO_TOKEN — órdenes por voz desactivadas');
+    }
 })().catch((err) => {
     // Un fallo al arrancar (token inválido, extractor que no carga) sí debe tumbar el proceso
     // para que Railway lo reinicie, en vez de quedar vivo sin conectarse

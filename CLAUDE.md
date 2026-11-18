@@ -11,7 +11,7 @@ npm start       # node dist/index.js
 npm run dev     # nodemon: recompila y reinicia al cambiar src/**/*.ts
 ```
 
-- Verifica cambios con `npm run build && npm test`. No hay linter. CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) solo hace `npm ci && npm run build`: **no corre los tests**.
+- Verifica cambios con `npm run build && npm test`. No hay linter. CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) hace `npm ci && npm test` (compila y corre los tests) en cada push o PR.
 - Tests con `node:test` + `node:assert/strict`, en `*.test.ts` junto al código (p. ej. [src/quiz/answers.test.ts](src/quiz/answers.test.ts), [src/ai/intents.test.ts](src/ai/intents.test.ts)). Solo cubren lógica pura (comparar respuestas, reglas de intents). **No pongas tests dentro de `commands/`, `events/` ni `player/`**: el loader cargaría el `.test.js` como si fuera un comando o evento.
 - SonarCloud ([.sonarcloud.properties](.sonarcloud.properties)) trata `*.test.ts` como pruebas.
 - `tsconfig` con `strict: false` y `noImplicitAny: false`; abunda `any`, no hace falta tiparlo todo.
@@ -33,7 +33,7 @@ Errores: el proceso captura `unhandledRejection`/`uncaughtException` y sigue viv
 
 ### Config ([src/config/config.ts](src/config/config.ts))
 
-Solo `DISCORD_TOKEN` es obligatoria. `config.spotify` es `null` si falta cualquiera de las dos credenciales de Spotify: entonces no se registra `SpotifyExtractor` y `=play` rechaza URLs de Spotify con un aviso. `config.deepseekApiKey` vacío = las menciones solo usan reglas.
+Solo `DISCORD_TOKEN` es obligatoria. `config.spotify` es `null` si falta cualquiera de las dos credenciales de Spotify: entonces no se registra `SpotifyExtractor` y `=play` rechaza URLs de Spotify con un aviso. `config.deepseekApiKey` vacío = las menciones solo usan reglas. `config.alfonso` es `null` sin `ALFONSO_TOKEN` (no hay órdenes por voz); con token pero `groqApiKey` vacío, Alfonso se conecta y responde que la voz no está configurada.
 
 ### Streaming de YouTube ([src/streamer.ts](src/streamer.ts))
 
@@ -62,6 +62,18 @@ El `YoutubeExtractor` de discord-player-youtubei se usa para **buscar**, pero el
 - Cada herramienta mapea a un **comando existente** y lo ejecuta con el mensaje original: validación y mensajes al canal son los mismos que con prefijo. Para una acción nueva por mención, crea el comando y añade la herramienta/regla; no dupliques lógica.
 - Durante un quiz no se interpreta nada, y antes de cada acción se re-comprueba `quizGuilds`.
 - El texto que devuelve la IA se envía con `allowedMentions: { parse: [] }` para que no pueda mencionar a @everyone, roles ni usuarios. Mantenlo.
+
+### Órdenes por voz: Alfonso ([src/voice/](src/voice/))
+
+- **Segundo Client de discord.js** con su propio token ([alfonso.ts](src/voice/alfonso.ts)), arrancado desde `index.ts` después del login principal. Existe porque discord-player usa `discord-voip`, que no tiene receptor de audio; Alfonso usa `@discordjs/voice` (≥ 0.19.2 + `@snazzah/davey` por el cifrado DAVE) con `group: 'alfonso'`. Un fallo de Alfonso se registra y **no** tumba el bot de música.
+- Sus eventos (`messageCreate`, `interactionCreate`, `voiceStateUpdate`) se enganchan en `alfonso.ts`, **no** en `src/events/`: el loader conectaría esos archivos al Client principal. Intents sin privilegios: `Guilds`, `GuildVoiceStates`, `GuildMessages` (el contenido de un mensaje que lo menciona llega sin `MessageContent`).
+- Entra cuando lo mencionan. Solo procesa a quien tocó **Escúchame** en el mensaje de esa entrada y sigue en su canal (estado en memoria, lógica pura en [listeners.ts](src/voice/listeners.ts)). A los demás ni se les decodifica el audio.
+- Frase: se corta por 700 ms de silencio (máx. 15 s), PCM 48 kHz estéreo → WAV 16 kHz mono ([audio.ts](src/voice/audio.ts)), se descartan las de < 600 ms y se transcribe con Whisper en Groq vía `fetch` ([transcribe.ts](src/voice/transcribe.ts)).
+- El `prompt` de Whisper es **solo vocabulario** (artistas/canciones, [vocabulary.ts](src/voice/vocabulary.ts)), con "Alfonso" dentro de la lista. Nunca pongas una orden en el prompt: con audio corto Whisper lo devuelve literal y dispararía órdenes falsas (pasó en el spike). `isPromptEcho` descarta esos ecos.
+- La palabra clave ([wakeword.ts](src/voice/wakeword.ts), con tests): "alfonso" al inicio de una oración, "ey/oye alfonso" en medio, o ", alfonso" al final. Sin eso la frase se descarta.
+- La orden se ejecuta con `interpretText(..., { voice: true })` de `assistant.ts` sobre un **Message mínimo** del Client principal ([voiceMessage.ts](src/voice/voiceMessage.ts)): así el resultado lo publica el bot de música igual que con una mención. Si un comando empieza a usar un campo de `Message` que ese objeto no tiene (p. ej. `reply`), añádelo ahí. Por voz: sin quiz, y las órdenes encadenadas con coma van a la IA (`hasCommaCompound`).
+- Topes diarios en memoria ([quota.ts](src/voice/quota.ts)) que cuentan lo que cobra Groq (mínimo 10 s por petición).
+- **Nunca registres el texto transcrito** ni lo que no es una orden: solo autor, duraciones y tiempos (`[Voz] orden en N ms`).
 
 ## Deploy
 

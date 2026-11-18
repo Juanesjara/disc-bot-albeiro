@@ -21,5 +21,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build TypeScript
-        run: npm run build
+      - name: Build TypeScript y tests
+        run: npm test

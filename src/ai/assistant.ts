@@ -3,7 +3,7 @@ import { BotClient } from '../types';
 import { config } from '../config/config';
 import { quizGuilds } from '../quiz/MusicQuiz';
 import { logSendError } from '../utils/safeSend';
-import { parseIntent } from './intents';
+import { hasCommaCompound, normalizePhrase, parseIntent } from './intents';
 
 // DeepSeek con API compatible con OpenAI: se llama con fetch, sin SDK
 const API_URL = 'https://api.deepseek.com/chat/completions';
@@ -14,6 +14,9 @@ const MAX_TURNS = 4;
 
 const CAPABILITIES = 'poner canciones, saltar, parar, pausar, reanudar, ver la cola, ver qué suena, '
     + 'pasar la letra de la canción, cambiar el volumen, quitar de la cola, limpiar la cola, loop, shuffle y quiz con una playlist de Spotify';
+// Por voz no se maneja el quiz (no se puede dictar la URL de la playlist)
+const VOICE_CAPABILITIES = 'poner canciones, saltar, parar, pausar, reanudar, ver la cola, ver qué suena, '
+    + 'pasar la letra de la canción, cambiar el volumen, quitar de la cola, limpiar la cola, loop y shuffle';
 
 const SYSTEM_PROMPT = `Eres el bot de música de un servidor de Discord. Los usuarios te mencionan con frases en español \
 para que hagas acciones. Tu único trabajo es traducir la frase a llamadas de herramientas.
@@ -128,10 +131,17 @@ const TOOLS: ToolDef[] = [
 ];
 
 const TOOLS_BY_NAME = new Map(TOOLS.map(t => [t.name, t]));
-const API_TOOLS = TOOLS.map(t => ({
+const toApiTools = (tools: ToolDef[]) => tools.map(t => ({
     type: 'function',
     function: { name: t.name, description: t.description, parameters: t.parameters },
 }));
+const API_TOOLS = toApiTools(TOOLS);
+const VOICE_API_TOOLS = toApiTools(TOOLS.filter(t => t.name !== 'quiz'));
+
+/** Opciones de interpretText: `voice` = la orden llegó hablada por Alfonso. */
+export interface InterpretOptions {
+    voice?: boolean;
+}
 
 // Solo cuenta la mención escrita explícitamente (<@id> o <@!id>), no las respuestas a mensajes del bot
 export function mentionRegex(botId: string): RegExp {
@@ -162,8 +172,28 @@ export async function handleMention(client: BotClient, message: Message): Promis
         return;
     }
 
-    // 1) Reglas: las frases comunes se entienden gratis y al instante
-    const intent = parseIntent(text);
+    await interpretText(client, message, text);
+}
+
+/**
+ * Entiende una frase ya sin la mención y ejecuta lo pedido: reglas primero, IA de respaldo.
+ * La usan la mención y las órdenes habladas a Alfonso (con un Message mínimo, ver src/voice/voiceMessage.ts).
+ */
+export async function interpretText(client: BotClient, message: Message, text: string, opts: InterpretOptions = {}): Promise<void> {
+    const capabilities = opts.voice ? VOICE_CAPABILITIES : CAPABILITIES;
+    if (!text) {
+        await message.channel.send(`Puedo ${capabilities}.`);
+        return;
+    }
+
+    if (opts.voice && /\bquiz\b/.test(normalizePhrase(text))) {
+        await message.channel.send(`:warning: El quiz no se maneja por voz: escríbelo con \`${config.prefix}quiz\`.`);
+        return;
+    }
+
+    // 1) Reglas: las frases comunes se entienden gratis y al instante.
+    // Hablando se encadenan órdenes con comas: eso lo resuelve la IA
+    const intent = opts.voice && hasCommaCompound(text) ? null : parseIntent(text);
     if (intent && 'ask' in intent) {
         await message.channel.send(intent.ask);
         return;
@@ -176,13 +206,13 @@ export async function handleMention(client: BotClient, message: Message): Promis
 
     // 2) Sin regla: decide la IA, si está configurada
     if (!config.deepseekApiKey) {
-        await message.channel.send(`:warning: No entendí. Puedo ${CAPABILITIES}. Prueba con algo como "pon Tusa de Karol G" o usa \`${config.prefix}help\`.`);
+        await message.channel.send(`:warning: No entendí. Puedo ${capabilities}. Prueba con algo como "pon Tusa de Karol G" o usa \`${config.prefix}help\`.`);
         return;
     }
-    await askModel(client, message, text);
+    await askModel(client, message, text, opts.voice ? VOICE_API_TOOLS : API_TOOLS);
 }
 
-async function askModel(client: BotClient, message: Message, text: string): Promise<void> {
+async function askModel(client: BotClient, message: Message, text: string, tools: any[]): Promise<void> {
     // Solo el autor: nunca el texto del mensaje
     console.log(`[IA] modelo (autor=${message.author.tag})`);
     const messages: any[] = [
@@ -193,7 +223,7 @@ async function askModel(client: BotClient, message: Message, text: string): Prom
 
     try {
         for (let turn = 0; turn < MAX_TURNS; turn++) {
-            const reply = await callModel(messages);
+            const reply = await callModel(messages, tools);
             const toolCalls: any[] = reply.tool_calls ?? [];
 
             if (!toolCalls.length) {
@@ -226,7 +256,7 @@ async function askModel(client: BotClient, message: Message, text: string): Prom
     }
 }
 
-async function callModel(messages: any[]): Promise<any> {
+async function callModel(messages: any[], tools: any[]): Promise<any> {
     const res = await fetch(API_URL, {
         method: 'POST',
         headers: {
@@ -236,7 +266,7 @@ async function callModel(messages: any[]): Promise<any> {
         body: JSON.stringify({
             model: MODEL,
             messages,
-            tools: API_TOOLS,
+            tools,
             tool_choice: 'auto',
             // Sin razonamiento: más rápido y barato, y basta para mapear una frase a comandos
             thinking: { type: 'disabled' },

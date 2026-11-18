@@ -37,7 +37,8 @@ const SHORTCUTS: Array<{ match: RegExp; shortcut: Shortcut }> = [
     {
         match: WIWI,
         shortcut: {
-            say: ':goat: ¡Llegó Wiwi, el GOAT de la ingeniería mecánica, top 2 en Saber Pro Colombia y casi médico!',
+            say: ':goat: ¡Llegó Wiwi, el GOAT de la ingeniería mecánica, top 2 en Saber Pro Colombia y casi médico! {mention}',
+            mentionName: 'Wilo_Wilo_Wilo_Wilo',
             play: 'pon Manifiéstate de Dani y Magneto',
         },
     },

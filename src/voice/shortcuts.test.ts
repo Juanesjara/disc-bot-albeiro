@@ -25,7 +25,7 @@ test('"llegó Wiwi" y como lo escriba Whisper', () => {
         assert.ok(s, said);
         assert.equal(s!.play, 'pon Manifiéstate de Dani y Magneto');
         assert.match(s!.say, /GOAT de la ingeniería mecánica, top 2 en Saber Pro Colombia y casi médico/);
-        assert.equal(s!.mentionName, undefined);
+        assert.equal(s!.mentionName, 'Wilo_Wilo_Wilo_Wilo');
     }
     assert.ok(matchShortcut(extractWakeCommand('Ey Alfonso, llegó Oui Oui.')!));
 });

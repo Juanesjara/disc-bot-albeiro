@@ -6,6 +6,7 @@ Bot de Discord con reproductor de música y quiz musical. Reproduce canciones de
 
 - Reproducción desde YouTube (streaming directo con yt-dlp) y enlaces de Spotify
 - Cola con controles completos: saltar, quitar, mezclar, repetir, volumen
+- Letra de la canción que está sonando (de [lrclib](https://lrclib.net), sin clave)
 - Precarga de la siguiente canción para que no haya silencio entre temas
 - Quiz musical: adivina el artista y/o título de canciones de una playlist de Spotify
 - Órdenes en lenguaje natural mencionando al bot
@@ -184,9 +185,9 @@ docker run --env-file .env coipia-albeiro
 
 La imagen es multi-stage: no lleva devDependencies, herramientas de compilación ni secretos, y corre sin root. Actualiza yt-dlp a la última versión en el build, porque YouTube rompe versiones viejas con frecuencia: si la música deja de sonar, reconstruir la imagen suele arreglarlo.
 
-### Heroku / Railway
+### Railway / Heroku
 
-El `Procfile` ya define el proceso como worker (`node dist/index.js`). Configura las variables de entorno en el dashboard del proveedor.
+En Railway el bot se construye con el `Dockerfile` (lo detecta solo al estar en la raíz). En plataformas sin Docker, como Heroku, el `Procfile` define el proceso como worker (`node dist/index.js`). En ambos casos configura las variables de entorno en el dashboard del proveedor.
 
 ### CI
 
@@ -206,7 +207,7 @@ src/
 ├── voice/            # Alfonso: escucha la voz, transcribe con Groq y pasa las órdenes
 ├── services/         # Lectura de playlists de Spotify
 ├── streamer.ts       # Streaming de YouTube con yt-dlp + precarga
-├── utils/            # Utilidades compartidas
+├── utils/            # Utilidades compartidas (envíos seguros, limpieza de títulos para letras)
 └── types/            # Tipos compartidos (Command, BotClient, ...)
 ```
 
@@ -217,4 +218,7 @@ Los comandos y eventos se cargan automáticamente desde sus carpetas. Para añad
 - [Discord.js v14](https://discord.js.org/)
 - [discord-player v7](https://discord-player.js.org/) + [discord-player-youtubei](https://github.com/retrouser955/discord-player-youtubei)
 - [youtube-dl-exec](https://github.com/microlinkhq/youtube-dl-exec) (yt-dlp) + [ffmpeg-static](https://github.com/eugeneware/ffmpeg-static)
+- [spotify-url-info](https://github.com/microlinkhq/spotify-url-info) para leer las playlists del quiz sin credenciales
+- [@discordjs/voice](https://github.com/discordjs/discord.js/tree/main/packages/voice) + [@snazzah/davey](https://github.com/Snazzah/davey) (cifrado DAVE) para que Alfonso reciba audio
+- [DeepSeek](https://platform.deepseek.com/) (menciones) y [Groq](https://groq.com/) Whisper (voz), por `fetch` sin SDK
 - TypeScript + Node.js 22

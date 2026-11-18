@@ -12,7 +12,7 @@ npm run dev     # nodemon: recompila y reinicia al cambiar src/**/*.ts
 ```
 
 - Verifica cambios con `npm run build && npm test`. No hay linter. CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) hace `npm ci && npm test` (compila y corre los tests) en cada push o PR.
-- Tests con `node:test` + `node:assert/strict`, en `*.test.ts` junto al código (p. ej. [src/quiz/answers.test.ts](src/quiz/answers.test.ts), [src/ai/intents.test.ts](src/ai/intents.test.ts)). Solo cubren lógica pura (comparar respuestas, reglas de intents). **No pongas tests dentro de `commands/`, `events/` ni `player/`**: el loader cargaría el `.test.js` como si fuera un comando o evento.
+- Tests con `node:test` + `node:assert/strict`, en `*.test.ts` junto al código (p. ej. [src/quiz/answers.test.ts](src/quiz/answers.test.ts), [src/ai/intents.test.ts](src/ai/intents.test.ts), [src/utils/lyrics.test.ts](src/utils/lyrics.test.ts) y los de [src/voice/](src/voice/)). Solo cubren lógica pura (comparar respuestas, reglas de intents, limpiar títulos y partir letras, wake word, audio, oyentes, topes, vocabulario). **No pongas tests dentro de `commands/`, `events/` ni `player/`**: el loader cargaría el `.test.js` como si fuera un comando o evento.
 - SonarCloud ([.sonarcloud.properties](.sonarcloud.properties)) trata `*.test.ts` como pruebas.
 - `tsconfig` con `strict: false` y `noImplicitAny: false`; abunda `any`, no hace falta tiparlo todo.
 - Probar de verdad requiere `.env` válido y un servidor de Discord con canal de voz.
@@ -41,7 +41,7 @@ El `YoutubeExtractor` de discord-player-youtubei se usa para **buscar**, pero el
 
 - El punto de entrada es el hook global `onBeforeCreateStream` en `index.ts`: es el único sitio donde discord-player da track + cola juntos, así que ahí se sabe el servidor (precarga por servidor y seek del quiz solo en su servidor). El `createStream` del extractor solo se usa para tracks puenteados (Spotify → YouTube).
 - `spawnStream(url, title, seekSeconds)`: con `seekSeconds > 0` encadena `yt-dlp | ffmpeg -ss N -c copy` para que el audio ya empiece en ese segundo (lo usa el quiz). Evita `queue.node.seek()`, que re-crea el stream y causa doble silencio.
-- Precarga **por servidor**: `prefetchTrack(guildId, url, title, seek)` y `takePrefetched(guildId, url, seek)`. Máx. 2 entradas por servidor, TTL 15 min. En `index.ts`, `playerStart` precarga el siguiente de la cola (salvo en quiz, que precarga él mismo con su seek); `emptyQueue` y `queueDelete` limpian las de ese servidor.
+- Precarga **por servidor**: `prefetchTrack(guildId, url, title, seek)` y `takePrefetched(guildId, url, seek)`. Máx. 2 entradas por servidor, TTL 15 min. En `index.ts`, `prefetchNext` precarga el siguiente de la cola en `playerStart`, `audioTrackAdd` y `audioTracksAdd` (si ya hay algo sonando; así una canción añadida con `=play` durante otra no arranca en frío). En quiz no hace nada: el quiz precarga él mismo con su seek. `emptyQueue` y `queueDelete` limpian las de ese servidor.
 - Si yt-dlp falla después de entregar el stream, el hook emite `playerError` en la cola para que música y quiz reaccionen.
 - `extractorArgs: 'youtube:player_client=tv,web_safari,mweb'` está probado en Railway con cookies; el historial de git muestra que cambiarlo rompió cosas. No lo toques sin motivo.
 - Los subprocesos se matan en el `close` del PassThrough y los rechazos de yt-dlp se capturan para que un track roto no tumbe el proceso. Mantén ambas cosas si refactorizas.
@@ -52,9 +52,15 @@ El `YoutubeExtractor` de discord-player-youtubei se usa para **buscar**, pero el
 - Cada canción se busca en YouTube como `"<título> <artista>"`, se elige la versión más vista sin remixes, suena desde 0:45 (`QUIZ_SEEK_SECONDS`), hay 60 s para adivinar y 1.5 s de pausa entre canciones (`SONG_GAP_MS`). Título 2 pts, artista 3 pts.
 - Comparar respuestas y armar el marcador es lógica pura en [src/quiz/answers.ts](src/quiz/answers.ts) (con tests). Cambios ahí → añade casos al test.
 - Respuestas: un `MessageCollector` sobre el canal. `=stop` y `=vskip` dentro del quiz los maneja el collector, **no** el sistema de comandos (`vskip` no existe como comando).
-- `quizGuilds` (exportado) es el estado global de "hay quiz en este servidor". Los comandos que tocan la cola usan `rejectIfQuizActive(message)` al inicio, y los eventos `playerStart`/`emptyQueue`/`emptyChannel` consultan `quizGuilds` para no interferir ni revelar la canción. Si añades un comando o evento de cola, haz lo mismo. Si el comando hace algo lento antes de tocar la cola (búsqueda, esperar al usuario), vuelve a llamar `rejectIfQuizActive` justo antes (ver `play.ts` y `search.ts`).
+- `quizGuilds` (exportado) es el estado global de "hay quiz en este servidor". Los comandos que tocan la cola usan `rejectIfQuizActive(message)` al inicio; `skip`, `stop` y `remove` consultan `quizGuilds` directamente porque su respuesta es distinta (`stop` calla para que lo maneje el collector, `skip` sugiere `=vskip`). `volume` no se bloquea. Los eventos `playerStart`/`emptyQueue`/`emptyChannel`/`error`/`playerError` consultan `quizGuilds` para no interferir ni revelar la canción. Si añades un comando o evento de cola, haz lo mismo. Si el comando hace algo lento antes de tocar la cola (búsqueda, esperar al usuario), vuelve a llamar `rejectIfQuizActive` justo antes (ver `play.ts` y `search.ts`).
 - `cleanup()` llama a `clearPrefetched(guildId)` porque las precargas del quiz traen seek a 0:45 y contaminarían un `=play` normal.
 - En [src/commands/quiz/quiz.ts](src/commands/quiz/quiz.ts), `activeQuizzes` protege mientras se carga la playlist; durante la partida protege `quizGuilds`.
+
+### Letras ([src/commands/music/lyrics.ts](src/commands/music/lyrics.ts))
+
+- Vienen de [lrclib.net](https://lrclib.net) (gratis, sin clave) llamado con `fetch`, **un solo intento** por búsqueda y timeout de 10 s. No uses el cliente de lrclib de discord-player: reintenta sin tope ante un 429.
+- Busca primero por título + artista y, si no hay nada, con texto libre. Limpiar el título de YouTube (`parseTrackTitle`) y partir en mensajes de 2000 caracteres sin cortar versos (`splitLyrics`) es lógica pura en [src/utils/lyrics.ts](src/utils/lyrics.ts), con tests.
+- Se bloquea durante el quiz, y se re-comprueba tras la búsqueda (revelaría la canción).
 
 ### Menciones en lenguaje natural ([src/ai/](src/ai/))
 
@@ -83,6 +89,6 @@ El `YoutubeExtractor` de discord-player-youtubei se usa para **buscar**, pero el
 
 - Todo en español: mensajes al usuario, comentarios, logs y commits.
 - Mensajes al usuario: `message.channel.send(':warning: ...')` para errores y `:white_check_mark:` para éxito; embeds con `EmbedBuilder` (verde `0x1DB954` para música).
-- Logs de consola con prefijo entre corchetes: `[Player]`, `[Stream]`, `[Prefetch]`, `[Quiz]`, `[yt-dlp]`, `[IA]`, `[Proceso]`.
+- Logs de consola con prefijo entre corchetes: `[Player]`, `[Stream]`, `[Prefetch]`, `[Quiz]`, `[yt-dlp]`, `[Lyrics]`, `[IA]`, `[Alfonso]`, `[Voz]`, `[Discord]`, `[Proceso]`.
 - Commits: Conventional Commits con scope, p. ej. `feat(quiz): ...`, `fix(music): ...`. Cambios a `master` por PR con squash merge.
 - Nunca subas `.env` ni `cookies.txt` (están en `.gitignore`, pero existen en local).

@@ -21,6 +21,7 @@ import { durationMs, toMono16k, toWav } from './audio';
 import { MIN_BILLED_MS, transcribe } from './transcribe';
 import { buildPrompt, isPromptEcho, remember, trackTerms } from './vocabulary';
 import { voiceMessage } from './voiceMessage';
+import { Shortcut, matchShortcut } from './shortcuts';
 
 // Silencio que cierra una frase y tope de duración (habla continua sin pausas)
 const SILENCE_MS = 700;
@@ -363,10 +364,32 @@ async function handleTranscript(session: Session, userId: string, result: { text
         return;
     }
 
+    const message = voiceMessage(main, guild, member, channel);
+
+    // Atajos propios del servidor ("llegó Yoryi"): el mensaje sale de una, antes que nada
+    const shortcut = matchShortcut(command);
+    if (shortcut) {
+        console.log(`[Voz] atajo en ${Date.now() - endedAt} ms (autor=${member.user.tag})`);
+        await sendShortcut(session, shortcut);
+        await interpretText(main, message, shortcut.play, { voice: true });
+        return;
+    }
+
     // Línea de "qué entendió": va antes del resultado de la acción
     await send(session.textChannel, `:speech_balloon: **${member.displayName}** dijo: "${command.slice(0, 300)}"`);
     console.log(`[Voz] orden en ${Date.now() - endedAt} ms (autor=${member.user.tag})`);
-    await interpretText(main, voiceMessage(main, guild, member, channel), command, { voice: true });
+    await interpretText(main, message, command, { voice: true });
+}
+
+/** Escribe el mensaje del atajo, etiquetando a `mentionName` si está en el canal de voz de Alfonso. */
+async function sendShortcut(session: Session, shortcut: Shortcut): Promise<void> {
+    const wanted = shortcut.mentionName?.toLowerCase();
+    const channel: any = alfonsoClient?.channels.cache.get(session.channelId);
+    const target = wanted ? channel?.members?.find((m: any) =>
+        [m.displayName, m.user.globalName, m.user.username].some(n => n?.toLowerCase() === wanted)) : null;
+    const content = shortcut.say.replace('{mention}', target ? `<@${target.id}>` : `**@${shortcut.mentionName ?? ''}**`).trim();
+    // Solo notifica a esa persona: nunca @everyone ni roles
+    await (session.textChannel as any).send({ content, allowedMentions: { users: target ? [target.id] : [] } }).catch(logSendError);
 }
 
 // ---------- Arranque ----------

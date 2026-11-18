@@ -17,8 +17,13 @@ const normalize = (s: string) => (s ?? '')
     .replace(/\s+/g, ' ')
     .trim();
 
+/** "llegó <nombre>" con las formas de decirlo; `names` son las variantes del nombre como las escribe Whisper. */
+const arrival = (names: string) => new RegExp(`^(ya )?(llego|llega|ya llego|ya esta|aqui esta) (el )?(${names})$`);
+
 // "llegó Yoryi" y como lo escriba Whisper: Gorgi, Yorgi, Jorgi, George...
-const YORYI = /^(ya )?(llego|llega|ya llego|ya esta|aqui esta|lleg[oó] el) (el )?(yoryi|yorgi|yorgui|yoryis|jorgi|jorgui|jorgy|gorgi|gorgui|georgi|george|georgie|giorgi|yoyi)$/;
+const YORYI = arrival('yoryi|yorgi|yorgui|yoryis|jorgi|jorgui|jorgy|gorgi|gorgui|georgi|george|georgie|giorgi|yoyi');
+// "llegó Wiwi" y como lo escriba Whisper: oui oui, wi wi, ui ui, güigüi...
+const WIWI = arrival('wi ?wi|wiwis|oui ?oui|ui ?ui|gui ?gui|wee ?wee|hui ?hui|whi ?whi|wui ?wui|uiui|wewe|we we');
 
 const SHORTCUTS: Array<{ match: RegExp; shortcut: Shortcut }> = [
     {
@@ -27,6 +32,13 @@ const SHORTCUTS: Array<{ match: RegExp; shortcut: Shortcut }> = [
             say: ':goat: ¡Llegó la cabra de las cabras de la economía! {mention}',
             mentionName: 'Coco',
             play: 'pon Daga Adicta de Luigi 21 Plus',
+        },
+    },
+    {
+        match: WIWI,
+        shortcut: {
+            say: ':goat: ¡Llegó Wiwi, el GOAT de la ingeniería mecánica, top 2 en Saber Pro Colombia y casi médico!',
+            play: 'pon Manifiéstate de Dani y Magneto',
         },
     },
 ];

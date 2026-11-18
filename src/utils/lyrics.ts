@@ -3,6 +3,8 @@
 
 /** Límite de caracteres de un mensaje de Discord. */
 export const DISCORD_MAX = 2000;
+/** Caracteres por página de letra (unas 25-30 líneas): cabe holgado en el recuadro y se lee sin hacer scroll. */
+export const LYRICS_PAGE_CHARS = 1000;
 
 // Separadores "Artista - Canción" que usa YouTube (con espacios alrededor)
 const SEPARATORS = [' - ', ' – ', ' — ', ' || ', ' | '];

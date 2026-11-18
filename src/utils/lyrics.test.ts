@@ -2,7 +2,7 @@
 // Viven en src/utils/ (no en commands/events/player) para que el loader del bot no las cargue.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTrackTitle, splitLyrics, DISCORD_MAX } from './lyrics';
+import { parseTrackTitle, splitLyrics, DISCORD_MAX, LYRICS_PAGE_CHARS } from './lyrics';
 
 test('título "Artista - Canción" con etiquetas entre paréntesis', () => {
     assert.deepEqual(parseTrackTitle('Karol G - TUSA (Official Video)'), { artist: 'Karol G', title: 'TUSA' });
@@ -65,4 +65,12 @@ test('una letra larga se parte en mensajes de 2000 o menos, cortando en saltos d
 test('una línea más larga que el límite se corta a la fuerza', () => {
     const chunks = splitLyrics('a'.repeat(4500), 2000);
     assert.deepEqual(chunks.map(c => c.length), [2000, 2000, 500]);
+});
+
+test('páginas de la letra: ninguna pasa de LYRICS_PAGE_CHARS y ningún verso se corta', () => {
+    const lines = Array.from({ length: 80 }, (_, i) => `Baby, hello, verso ${i} de la canción`);
+    const pages = splitLyrics(lines.join('\n'), LYRICS_PAGE_CHARS);
+    assert.ok(pages.length >= 2);
+    for (const p of pages) assert.ok(p.length <= LYRICS_PAGE_CHARS, `página de ${p.length}`);
+    assert.equal(pages.join('\n'), lines.join('\n'));
 });

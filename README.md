@@ -28,6 +28,7 @@ Todos los comandos se escriben en un canal de texto del servidor. Usa `=help <co
 | `=stop` | — | Detiene la música y limpia la cola |
 | `=queue [página]` | `=q` | Muestra la cola |
 | `=nowplaying` | `=np` | Muestra la canción actual |
+| `=lyrics` | `=letra`, `=ly` | Muestra la letra de la canción actual |
 | `=remove <número>` | `=rm`, `=quit` | Quita una canción de la cola (el número que muestra `=queue`) |
 | `=clear` | `=clearqueue` | Limpia la cola sin detener la canción actual |
 | `=loop [off\|track\|queue]` | `=repeat` | Cambia el modo de repetición |
@@ -60,6 +61,7 @@ También puedes mencionar al bot y pedirle las cosas con tus palabras:
 - `@bot pon Tusa de Karol G`
 - `@bot salta esta`
 - `@bot qué está sonando`
+- `@bot pásame la letra`
 - `@bot para la música`
 - `@bot haz un quiz de 10 canciones con esta playlist <url de Spotify>`
 

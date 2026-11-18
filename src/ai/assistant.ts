@@ -13,10 +13,10 @@ const TIMEOUT_MS = 20_000;
 const MAX_TURNS = 4;
 
 const CAPABILITIES = 'poner canciones, saltar, parar, pausar, reanudar, ver la cola, ver qué suena, '
-    + 'cambiar el volumen, quitar de la cola, limpiar la cola, loop, shuffle y quiz con una playlist de Spotify';
+    + 'pasar la letra de la canción, cambiar el volumen, quitar de la cola, limpiar la cola, loop, shuffle y quiz con una playlist de Spotify';
 // Por voz no se maneja el quiz (no se puede dictar la URL de la playlist)
 const VOICE_CAPABILITIES = 'poner canciones, saltar, parar, pausar, reanudar, ver la cola, ver qué suena, '
-    + 'cambiar el volumen, quitar de la cola, limpiar la cola, loop y shuffle';
+    + 'pasar la letra de la canción, cambiar el volumen, quitar de la cola, limpiar la cola, loop y shuffle';
 
 const SYSTEM_PROMPT = `Eres el bot de música de un servidor de Discord. Los usuarios te mencionan con frases en español \
 para que hagas acciones. Tu único trabajo es traducir la frase a llamadas de herramientas.
@@ -72,6 +72,7 @@ const TOOLS: ToolDef[] = [
         toArgs: (i) => (i.page ? [String(i.page)] : []),
     },
     simple('nowplaying', 'Muestra qué canción está sonando.'),
+    simple('lyrics', 'Publica la letra de la canción que está sonando ahora. Solo sirve para esa: si piden la letra de otra canción, no la llames y di que solo puedes dar la de la canción actual.'),
     {
         name: 'volume',
         description: 'Cambia el volumen.',

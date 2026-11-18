@@ -46,9 +46,17 @@ const FIXED: Array<[RegExp, string, string[]]> = [
     [/^repite (esta|esa|la cancion|esta cancion)$/, 'loop', ['track']],
     [/^repite (la cola|todo)$/, 'loop', ['queue']],
     [/^(no repitas|deja de repetir|sin repetir|quita el (loop|repetir))$/, 'loop', ['off']],
-    // "pasame la letra", "la letra de la cancion", "cual es la letra de esta" (también sin el "de")
-    [/^(((pasame|pasa|dame|muestra|muestrame|ensename|manda|mandame|cual es|quiero|tienes|ver) )?(la )?letra|lyrics)( (de )?(la cancion|esta cancion|esa cancion|esta|esa|la))?$/, 'lyrics', []],
 ];
+
+// "pasame la letra", "la letra de la cancion", "cual es la letra de esta" (también sin el "de")
+const LYRICS_VERBS = ['pasame', 'pasa', 'dame', 'muestra', 'muestrame', 'ensename', 'manda', 'mandame', 'cual es', 'quiero', 'tienes', 'ver'];
+const LYRICS_TARGET = /^(la )?letra( (de )?(la|esta|esa)( cancion)?)?$/;
+
+function isLyricsRequest(n: string): boolean {
+    if (n === 'lyrics') return true;
+    const verb = LYRICS_VERBS.find(v => n.startsWith(v + ' '));
+    return LYRICS_TARGET.test(verb ? n.slice(verb.length + 1) : n);
+}
 
 /**
  * Traduce una frase (ya sin la mención) a un comando del bot.
@@ -77,6 +85,7 @@ export function parseIntent(text: string): Intent | null {
     for (const [pattern, command, args] of FIXED) {
         if (pattern.test(n)) return { command, args };
     }
+    if (isLyricsRequest(n)) return { command: 'lyrics', args: [] };
 
     // "volumen 30", "pon el volumen en 30", "baja el volumen a 20%"
     const vol = n.match(/^((pon|sube|baja|cambia) )?(el )?(volumen|vol)( (a|en|al))? (\d{1,3})( ?%| por ciento)?$/);

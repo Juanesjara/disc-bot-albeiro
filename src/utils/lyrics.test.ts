@@ -39,6 +39,12 @@ test('tracks de Spotify y canales "- Topic": artista del canal y sin sufijo de v
     assert.deepEqual(parseTrackTitle('Dos Oruguitas - From "Encanto"', 'Sebastián Yatra', true), { artist: 'Sebastián Yatra', title: 'Dos Oruguitas' });
 });
 
+test('un título que empieza como una versión no se pierde', () => {
+    assert.deepEqual(parseTrackTitle('Oasis - Live Forever (Official Video)'), { artist: 'Oasis', title: 'Live Forever' });
+    assert.deepEqual(parseTrackTitle('Bad Bunny - En Casita'), { artist: 'Bad Bunny', title: 'En Casita' });
+    assert.deepEqual(parseTrackTitle('Oasis - Wonderwall - Live at Knebworth'), { artist: 'Oasis', title: 'Wonderwall' });
+});
+
 test('título que queda vacío tras limpiar', () => {
     assert.deepEqual(parseTrackTitle('Artist - [Official Video]', 'X'), { artist: 'Artist', title: '' });
 });

@@ -8,7 +8,7 @@ export const BASE_VOCABULARY = [
     'Peso Pluma', 'Quevedo', 'Bizarrap', 'Rauw Alejandro', 'Ozuna', 'Mora', 'Young Miko', 'Anuel AA',
     'Farruko', 'Sech', 'Daddy Yankee', 'Shakira', 'Kapo', 'Beéle', 'Emilia', 'Tiago PZK',
     // Atajos del servidor (src/voice/shortcuts.ts)
-    'Yoryi', 'Luigi 21 Plus', 'Daga Adicta',
+    'Yoryi', 'Luigi 21 Plus', 'Daga Adicta', 'Wiwi', 'Manifiéstate', 'Dani y Magneto',
 ];
 
 // Whisper solo mira ~224 tokens del prompt: un tope en caracteres deja margen

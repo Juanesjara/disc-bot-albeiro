@@ -5,6 +5,7 @@ Bot de Discord con reproductor de música y quiz musical. Reproduce canciones de
 ## Características
 
 - Reproducción desde YouTube (streaming directo con yt-dlp) y enlaces de Spotify
+- Búsquedas por nombre en YouTube Music: solo devuelve canciones, no videos cualquiera
 - Cola con controles completos: saltar, quitar, mezclar, repetir, volumen
 - Letra de la canción que está sonando (de [lrclib](https://lrclib.net), sin clave)
 - Precarga de la siguiente canción para que no haya silencio entre temas
@@ -22,7 +23,7 @@ Todos los comandos se escriben en un canal de texto del servidor. Usa `=help <co
 | Comando | Alias | Descripción |
 |---------|-------|-------------|
 | `=play <nombre o URL>` | `=p` | Reproduce una canción o playlist (YouTube / Spotify) |
-| `=search <nombre>` | `=sc` | Busca y te deja escoger qué reproducir |
+| `=search <nombre>` | `=sc` | Busca canciones y te deja escoger cuál reproducir |
 | `=pause` | — | Pausa la música |
 | `=resume` | `=r` | Reanuda la música pausada |
 | `=skip` | `=s` | Salta la canción actual |
@@ -35,6 +36,8 @@ Todos los comandos se escriben en un canal de texto del servidor. Usa `=help <co
 | `=loop [off\|track\|queue]` | `=repeat` | Cambia el modo de repetición |
 | `=shuffle` | — | Mezcla la cola |
 | `=volume <1-100>` | `=vol` | Ajusta el volumen |
+
+Al buscar por nombre (`=play`, `=search` y el quiz) el bot consulta YouTube Music, así que encuentra la canción y no un video con el mismo nombre. Si YouTube Music falla o no encuentra nada, busca en YouTube normal.
 
 Mientras hay un quiz en el servidor, los comandos de música no están disponibles (salvo `=volume`).
 
@@ -205,9 +208,9 @@ src/
 ├── quiz/             # Lógica del quiz musical y comparación de respuestas
 ├── ai/               # Menciones en lenguaje natural: reglas + DeepSeek
 ├── voice/            # Alfonso: escucha la voz, transcribe con Groq y pasa las órdenes
-├── services/         # Lectura de playlists de Spotify
+├── services/         # Lectura de playlists de Spotify y búsqueda en YouTube Music
 ├── streamer.ts       # Streaming de YouTube con yt-dlp + precarga
-├── utils/            # Utilidades compartidas (envíos seguros, limpieza de títulos para letras)
+├── utils/            # Utilidades compartidas (envíos seguros, letras, resultados de YouTube Music)
 └── types/            # Tipos compartidos (Command, BotClient, ...)
 ```
 
@@ -216,7 +219,7 @@ Los comandos y eventos se cargan automáticamente desde sus carpetas. Para añad
 ## Stack
 
 - [Discord.js v14](https://discord.js.org/)
-- [discord-player v7](https://discord-player.js.org/) + [discord-player-youtubei](https://github.com/retrouser955/discord-player-youtubei)
+- [discord-player v7](https://discord-player.js.org/) + [discord-player-youtubei](https://github.com/retrouser955/discord-player-youtubei) (búsqueda en YouTube y YouTube Music)
 - [youtube-dl-exec](https://github.com/microlinkhq/youtube-dl-exec) (yt-dlp) + [ffmpeg-static](https://github.com/eugeneware/ffmpeg-static)
 - [spotify-url-info](https://github.com/microlinkhq/spotify-url-info) para leer las playlists del quiz sin credenciales
 - [@discordjs/voice](https://github.com/discordjs/discord.js/tree/main/packages/voice) + [@snazzah/davey](https://github.com/Snazzah/davey) (cifrado DAVE) para que Alfonso reciba audio

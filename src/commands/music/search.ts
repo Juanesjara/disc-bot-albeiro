@@ -2,6 +2,7 @@ import { Message, GuildMember, TextChannel, EmbedBuilder } from 'discord.js';
 import { useMainPlayer } from 'discord-player';
 import { BotClient, Command } from '../../types';
 import { rejectIfQuizActive } from '../../quiz/MusicQuiz';
+import { searchSongs } from '../../services/youtubeMusic';
 
 function formatViews(views: number): string {
     if (!views) return 'N/A';
@@ -32,13 +33,18 @@ const command: Command = {
 
         const query = args.join(' ');
         const player = useMainPlayer();
-        const results = await player.search(query, { requestedBy: message.author });
+        let found;
+        try {
+            found = await searchSongs(query, message.author);
+        } catch (err: any) {
+            return message.channel.send(`:warning: No pude buscar: ${err.message}`);
+        }
 
-        if (!results.hasTracks()) {
+        if (!found.length) {
             return message.channel.send(':warning: No encontré resultados para esa búsqueda.');
         }
 
-        const tracks = results.tracks.slice(0, 5);
+        const tracks = found.slice(0, 5);
 
         const lines = tracks.map((t, i) => {
             const views = formatViews(t.views);

@@ -8,6 +8,7 @@ import {
 } from 'discord.js';
 import { useMainPlayer, useQueue, Track, GuildQueue } from 'discord-player';
 import { SpotifyService } from '../services/spotify';
+import { searchSongs } from '../services/youtubeMusic';
 import { Song } from '../types';
 import { config } from '../config/config';
 import { prefetchTrack, clearPrefetched } from '../streamer';
@@ -129,19 +130,19 @@ export class MusicQuiz {
         if (this.stopped) return;
 
         const player = useMainPlayer();
-        // Buscar en YouTube por título+artista; filtrar remixes y elegir la versión más vista
+        // Buscar en YouTube Music por título+artista; filtrar remixes y elegir la versión más vista
         const query = `${song.title} ${song.artist}`;
 
         try {
-            const result = await player.search(query);
+            const tracks = await searchSongs(query);
             // =stop durante la búsqueda: no volver a entrar al canal ni revelar la canción
             if (this.stopped) return;
 
-            if (!result.hasTracks()) {
+            if (!tracks.length) {
                 return this.nextSong('No encontré esta canción en YouTube, pasando a la siguiente.');
             }
 
-            const best = MusicQuiz.pickBest(result.tracks);
+            const best = MusicQuiz.pickBest(tracks);
             console.log(best.title, best.url);
 
             // Asegurar que el stream exista YA empezando en 0:45 (si la precarga de la
@@ -171,7 +172,7 @@ export class MusicQuiz {
             }
 
             // Mientras suena esta, dejar lista la siguiente (búsqueda + stream en 0:45)
-            this.prefetchNextSong(player);
+            this.prefetchNextSong();
 
         } catch (err: any) {
             console.error('[Quiz] Error reproduciendo canción:', err?.message ?? err);
@@ -200,13 +201,13 @@ export class MusicQuiz {
 
     // Precarga (búsqueda + stream desde 0:45) de la siguiente canción del quiz
     // mientras suena la actual, para que la transición sea casi instantánea
-    private prefetchNextSong(player: ReturnType<typeof useMainPlayer>): void {
+    private prefetchNextSong(): void {
         const next = this.songs[this.currentIndex + 1];
         if (!next) return;
-        player.search(`${next.title} ${next.artist}`)
-            .then(res => {
-                if (this.stopped || !res.hasTracks()) return;
-                const best = MusicQuiz.pickBest(res.tracks);
+        searchSongs(`${next.title} ${next.artist}`)
+            .then(tracks => {
+                if (this.stopped || !tracks.length) return;
+                const best = MusicQuiz.pickBest(tracks);
                 prefetchTrack(this.guildId, best.url, best.title, QUIZ_SEEK_SECONDS);
             })
             .catch(() => {});

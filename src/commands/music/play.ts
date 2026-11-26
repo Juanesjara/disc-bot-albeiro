@@ -3,6 +3,7 @@ import { useMainPlayer, Track } from 'discord-player';
 import { BotClient, Command } from '../../types';
 import { config } from '../../config/config';
 import { rejectIfQuizActive } from '../../quiz/MusicQuiz';
+import { searchSongs } from '../../services/youtubeMusic';
 
 const REMIX_KEYWORDS = [
     'remix', 'slowed', 'reverb', 'cover', 'hardstyle', 'dubstep',
@@ -66,11 +67,11 @@ const command: Command = {
             }
 
             if (!isUrl) {
-                const results = await player.search(query, { requestedBy: message.author });
-                if (!results.hasTracks()) {
+                const tracks = await searchSongs(query, message.author);
+                if (!tracks.length) {
                     return message.channel.send(':warning: No encontré resultados para esa búsqueda.');
                 }
-                trackToPlay = pickBestTrack(results.tracks, query);
+                trackToPlay = pickBestTrack(tracks, query);
             }
 
             // Pudo arrancar un quiz mientras se buscaba la canción

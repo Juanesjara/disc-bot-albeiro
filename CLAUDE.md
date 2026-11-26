@@ -79,7 +79,7 @@ El `YoutubeExtractor` de discord-player-youtubei se usa para **buscar**, pero el
 - La palabra clave ([wakeword.ts](src/voice/wakeword.ts), con tests): "alfonso" al inicio de una oración, "ey/oye alfonso" en medio, o ", alfonso" al final. Sin eso la frase se descarta.
 - La orden se ejecuta con `interpretText(..., { voice: true })` de `assistant.ts` sobre un **Message mínimo** del Client principal ([voiceMessage.ts](src/voice/voiceMessage.ts)): así el resultado lo publica el bot de música igual que con una mención. Si un comando empieza a usar un campo de `Message` que ese objeto no tiene (p. ej. `reply`), añádelo ahí. Por voz: sin quiz, y las órdenes encadenadas con coma van a la IA (`hasCommaCompound`).
 - Topes diarios en memoria ([quota.ts](src/voice/quota.ts)) que cuentan lo que cobra Groq (mínimo 10 s por petición).
-- **Nunca registres el texto transcrito** ni lo que no es una orden: solo autor, duraciones y tiempos (`[Voz] orden en N ms`).
+- **Nunca registres el texto transcrito**: solo autor, duraciones, tiempos y el motivo del descarte (`[Voz] orden en N ms`, `[Voz] frase de N ms: sin palabra clave`). Así se ve si la voz llega sin exponer lo que se dijo.
 
 ## Deploy
 

@@ -93,6 +93,10 @@ function isBot(guildId: string, userId: string): boolean {
     return !!(guild?.members.cache.get(userId)?.user.bot ?? alfonsoClient?.users.cache.get(userId)?.bot);
 }
 
+function tagOf(userId: string): string {
+    return alfonsoClient?.users.cache.get(userId)?.tag ?? userId;
+}
+
 function canProcess(session: Session, userId: string): boolean {
     return sessions.get(session.guildId) === session
         && shouldProcessVoice(session, userId, userVoiceChannel(session.guildId, userId), isBot(session.guildId, userId));
@@ -321,7 +325,10 @@ function onPhrase(session: Session, userId: string, pcm: Buffer, endedAt: number
     if (ms < MIN_PHRASE_MS) return;
     // "Ya no" o salir del canal mientras hablaba: la frase no se manda
     if (!canProcess(session, userId) || quizGuilds.has(session.guildId)) return;
-    if (quota!.check(userId) !== 'ok') return;
+    if (quota!.check(userId) !== 'ok') {
+        console.log(`[Voz] frase de ${ms} ms descartada: tope diario (autor=${tagOf(userId)})`);
+        return;
+    }
     quota!.add(userId, Math.max(ms, MIN_BILLED_MS));
 
     // La transcripción arranca ya; la orden espera a que terminen las frases anteriores
@@ -331,11 +338,11 @@ function onPhrase(session: Session, userId: string, pcm: Buffer, endedAt: number
         (err) => ({ err }),
     );
     session.chain = session.chain
-        .then(async () => handleTranscript(session, userId, await pending, endedAt))
+        .then(async () => handleTranscript(session, userId, await pending, endedAt, ms))
         .catch((err) => console.error('[Voz] Error procesando la orden:', err?.message ?? err));
 }
 
-async function handleTranscript(session: Session, userId: string, result: { text?: string; prompt?: string; err?: any }, endedAt: number): Promise<void> {
+async function handleTranscript(session: Session, userId: string, result: { text?: string; prompt?: string; err?: any }, endedAt: number, ms: number): Promise<void> {
     // "Ya no" o salir del canal mientras se transcribía: la orden ya no se ejecuta
     if (!canProcess(session, userId)) return;
 
@@ -350,10 +357,17 @@ async function handleTranscript(session: Session, userId: string, result: { text
     session.failures = 0;
 
     const text = result.text ?? '';
-    if (isPromptEcho(text, result.prompt ?? '')) return;
-    // Sin "ey alfonso" al inicio: se descarta sin registrar nada
+    // Sin la palabra clave (o eco del prompt): se descarta. El log dice solo duración y autor, nunca el texto
+    if (isPromptEcho(text, result.prompt ?? '')) {
+        console.log(`[Voz] frase de ${ms} ms: ruido (autor=${tagOf(userId)})`);
+        return;
+    }
     const command = extractWakeCommand(text);
-    if (command === null || quizGuilds.has(session.guildId)) return;
+    if (command === null) {
+        console.log(`[Voz] frase de ${ms} ms: sin palabra clave (autor=${tagOf(userId)})`);
+        return;
+    }
+    if (quizGuilds.has(session.guildId)) return;
 
     const main = mainClient!;
     const guild = main.guilds.cache.get(session.guildId);
